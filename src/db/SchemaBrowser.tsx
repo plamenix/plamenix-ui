@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import type { Schema, TableInfo } from './types';
+import { useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { TableContextMenu } from './TableContextMenu';
+import type { Schema, TableAction, TableInfo } from './types';
 
 export interface SchemaBrowserProps {
   /** The current schema, or `null` while it is being fetched / before
@@ -13,6 +14,11 @@ export interface SchemaBrowserProps {
    *  identifier the host should insert into the query editor. Omit to
    *  make node labels non-interactive. */
   onSelect?: (identifier: string) => void;
+  /** Fired when the user picks a DDL action from a table's
+   *  right-click menu. The browser never executes SQL itself; the
+   *  host translates the action into a statement and routes it
+   *  through the usual execute path. Omit to suppress the menu. */
+  onAction?: (action: TableAction, table: TableInfo) => void;
 }
 
 /**
@@ -23,9 +29,22 @@ export interface SchemaBrowserProps {
  * (table → columns) only; nested relations would need a richer
  * `Schema` shape.
  */
-export function SchemaBrowser({ schema, busy = false, onRefresh, onSelect }: SchemaBrowserProps) {
+interface MenuState {
+  table: TableInfo;
+  x: number;
+  y: number;
+}
+
+export function SchemaBrowser({
+  schema,
+  busy = false,
+  onRefresh,
+  onSelect,
+  onAction,
+}: SchemaBrowserProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
+  const [menu, setMenu] = useState<MenuState | null>(null);
 
   const toggle = (name: string) => {
     setExpanded((prev) => {
@@ -83,11 +102,28 @@ export function SchemaBrowser({ schema, busy = false, onRefresh, onSelect }: Sch
                 expanded={expanded.has(t.name)}
                 onToggle={() => toggle(t.name)}
                 onSelect={onSelect}
+                onContextMenu={
+                  onAction
+                    ? (event) => {
+                        event.preventDefault();
+                        setMenu({ table: t, x: event.clientX, y: event.clientY });
+                      }
+                    : undefined
+                }
               />
             ))}
           </ul>
         )}
       </div>
+      {menu && onAction && (
+        <TableContextMenu
+          x={menu.x}
+          y={menu.y}
+          title={menu.table.name}
+          onAction={(action) => onAction(action, menu.table)}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </aside>
   );
 }
@@ -97,11 +133,12 @@ interface TableNodeProps {
   expanded: boolean;
   onToggle: () => void;
   onSelect: ((identifier: string) => void) | undefined;
+  onContextMenu: ((event: ReactMouseEvent<HTMLLIElement>) => void) | undefined;
 }
 
-function TableNode({ table, expanded, onToggle, onSelect }: TableNodeProps) {
+function TableNode({ table, expanded, onToggle, onSelect, onContextMenu }: TableNodeProps) {
   return (
-    <li>
+    <li onContextMenu={onContextMenu}>
       <div className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-zinc-900">
         <button
           type="button"

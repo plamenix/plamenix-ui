@@ -22,6 +22,7 @@ export type {
   QueryResult,
   Row,
   Schema,
+  TableAction,
   TableInfo,
   TableKind,
 } from './db/types';
@@ -33,6 +34,7 @@ export { ProfilePicker, type ProfilePickerProps } from './db/ProfilePicker';
 export { QueryPanel, type QueryPanelProps } from './db/QueryPanel';
 export { SchemaBrowser, type SchemaBrowserProps } from './db/SchemaBrowser';
 export { SqlEditor, type SqlEditorProps } from './db/SqlEditor';
+export { TableContextMenu, type TableContextMenuProps } from './db/TableContextMenu';
 export { TabStrip, type TabStripProps } from './db/TabStrip';
 export {
   DEFAULT_FORM,

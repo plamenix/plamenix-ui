@@ -98,6 +98,12 @@ export interface ColumnInfo {
   nullable: boolean;
 }
 
+/** DDL action the schema browser surfaces on its per-table context
+ *  menu. The browser itself never executes SQL — the host translates
+ *  the action into a concrete statement and routes it through the
+ *  usual `execute` path. */
+export type TableAction = 'drop' | 'alter' | 'create-index';
+
 /** Renders a cell value as a string for display. */
 export function renderCell(cell: ColumnValue): string {
   switch (cell.type) {
