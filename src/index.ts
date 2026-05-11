@@ -11,3 +11,16 @@
 
 export type { Transport } from './transport';
 export { TransportError } from './transport';
+
+export type {
+  ColumnDescription,
+  ColumnValue,
+  ConnectionForm,
+  QueryResult,
+  Row,
+} from './db/types';
+export { renderCell } from './db/types';
+export { Field, type FieldProps } from './db/Field';
+export { ConnectionPanel, type ConnectionPanelProps } from './db/ConnectionPanel';
+export { QueryPanel, type QueryPanelProps } from './db/QueryPanel';
+export { ResultTable, type ResultTableProps } from './db/ResultTable';
