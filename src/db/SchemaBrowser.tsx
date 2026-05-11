@@ -1,4 +1,14 @@
-import { useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useState, type ComponentType, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Database,
+  Eye,
+  Loader2,
+  RefreshCw,
+  Search,
+  Table2,
+} from 'lucide-react';
 import { TableContextMenu } from './TableContextMenu';
 import type { Schema, TableAction, TableInfo } from './types';
 
@@ -8,7 +18,7 @@ export interface SchemaBrowserProps {
   schema: Schema | null;
   /** Disables the refresh button while a request is in flight. */
   busy?: boolean;
-  /** Fired when the user clicks the refresh chevron. Omit to hide. */
+  /** Fired when the user clicks the refresh button. Omit to hide. */
   onRefresh?: () => void;
   /** Fired when the user clicks a table or column name, with the
    *  identifier the host should insert into the query editor. Omit to
@@ -21,20 +31,35 @@ export interface SchemaBrowserProps {
   onAction?: (action: TableAction, table: TableInfo) => void;
 }
 
-/**
- * Sidebar tree of tables and views with their columns.
- *
- * The component is purely presentational: the host owns the schema
- * state, refresh handler, and any click-to-insert behaviour. Two-level
- * (table → columns) only; nested relations would need a richer
- * `Schema` shape.
- */
 interface MenuState {
   table: TableInfo;
   x: number;
   y: number;
 }
 
+function highlightMatch(text: string, query: string): ReactNode {
+  if (!query) return text;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <span className="rounded-sm bg-warning-subtle px-0.5 text-warning">
+        {text.slice(idx, idx + query.length)}
+      </span>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
+/**
+ * Sidebar tree of tables and views with their columns.
+ *
+ * The component is purely presentational: the host owns the schema
+ * state, refresh handler, and any click-to-insert behaviour. Tables
+ * and views render in two collapsible sections; columns expand
+ * inline under each table.
+ */
 export function SchemaBrowser({
   schema,
   busy = false,
@@ -45,6 +70,8 @@ export function SchemaBrowser({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [openTables, setOpenTables] = useState(true);
+  const [openViews, setOpenViews] = useState(true);
 
   const toggle = (name: string) => {
     setExpanded((prev) => {
@@ -55,66 +82,109 @@ export function SchemaBrowser({
     });
   };
 
-  const filterLower = filter.trim().toLowerCase();
-  const tables =
-    schema === null
-      ? []
-      : filterLower === ''
-        ? schema.tables
-        : schema.tables.filter((t) => t.name.toLowerCase().includes(filterLower));
+  const lower = filter.trim().toLowerCase();
+  const isSearching = lower !== '';
+  const allTables = schema?.tables ?? [];
+  const matchesFilter = (t: TableInfo) =>
+    !isSearching || t.name.toLowerCase().includes(lower);
+  const tables = allTables.filter((t) => t.kind === 'table' && matchesFilter(t));
+  const views = allTables.filter((t) => t.kind === 'view' && matchesFilter(t));
+  const showTables = isSearching || openTables;
+  const showViews = isSearching || openViews;
+
+  const renderTableNode = (t: TableInfo) => (
+    <TableNode
+      key={t.name}
+      table={t}
+      filter={filter}
+      expanded={expanded.has(t.name)}
+      onToggle={() => toggle(t.name)}
+      onSelect={onSelect}
+      onContextMenu={
+        onAction
+          ? (event) => {
+              event.preventDefault();
+              setMenu({ table: t, x: event.clientX, y: event.clientY });
+            }
+          : undefined
+      }
+    />
+  );
 
   return (
-    <aside className="flex h-full flex-col gap-2 border-r border-edge bg-canvas p-3 text-xs">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-fg">Schema</h2>
+    <aside className="flex h-full flex-col bg-panel text-xs">
+      <div className="flex items-center justify-between border-b border-edge px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <Database className="h-3.5 w-3.5 text-accent" />
+          <h2 className="text-[13px] font-semibold text-fg">Schema</h2>
+        </div>
         {onRefresh && (
           <button
             type="button"
-            className="rounded border border-edge px-2 py-0.5 text-fg-muted hover:bg-panel disabled:opacity-50"
-            disabled={busy}
             onClick={onRefresh}
+            disabled={busy}
             aria-label="Refresh schema"
+            title="Refresh schema"
+            className="rounded-md p-1 text-fg-subtle transition-colors hover:bg-elevated hover:text-fg disabled:opacity-50"
           >
-            ↻
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
           </button>
         )}
       </div>
-      <input
-        className="input text-xs"
-        placeholder="Filter…"
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-        aria-label="Filter tables"
-      />
-      <div className="flex-1 overflow-y-auto">
+
+      <div className="border-b border-edge px-3 py-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" />
+          <input
+            type="text"
+            placeholder="Filter objects…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-full rounded-lg border border-edge bg-inset py-1.5 pl-8 pr-3 text-xs text-fg placeholder:text-fg-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            aria-label="Filter tables"
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto py-1">
         {schema === null ? (
-          <p className="text-fg-subtle">No schema loaded.</p>
-        ) : tables.length === 0 ? (
-          <p className="text-fg-subtle">
-            {schema.tables.length === 0 ? 'No user tables.' : 'No matches.'}
-          </p>
+          <p className="px-3 py-2 italic text-fg-subtle">No schema loaded.</p>
+        ) : allTables.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center px-6 py-8 text-center">
+            <Database className="mb-3 h-8 w-8 text-fg-subtle opacity-40" />
+            <p className="text-xs font-medium text-fg-muted">No user tables</p>
+          </div>
+        ) : tables.length === 0 && views.length === 0 ? (
+          <p className="px-3 py-2 italic text-fg-subtle">No matches.</p>
         ) : (
-          <ul className="flex flex-col gap-0.5">
-            {tables.map((t) => (
-              <TableNode
-                key={t.name}
-                table={t}
-                expanded={expanded.has(t.name)}
-                onToggle={() => toggle(t.name)}
-                onSelect={onSelect}
-                onContextMenu={
-                  onAction
-                    ? (event) => {
-                        event.preventDefault();
-                        setMenu({ table: t, x: event.clientX, y: event.clientY });
-                      }
-                    : undefined
-                }
-              />
-            ))}
-          </ul>
+          <>
+            <SectionHeader
+              label="Tables"
+              icon={Table2}
+              open={showTables}
+              count={tables.length}
+              locked={isSearching}
+              onToggle={() => setOpenTables((v) => !v)}
+            />
+            {showTables && tables.map(renderTableNode)}
+
+            <SectionHeader
+              label="Views"
+              icon={Eye}
+              open={showViews}
+              count={views.length}
+              locked={isSearching}
+              onToggle={() => setOpenViews((v) => !v)}
+            />
+            {showViews && views.map(renderTableNode)}
+          </>
         )}
       </div>
+
       {menu && onAction && (
         <TableContextMenu
           x={menu.x}
@@ -128,69 +198,119 @@ export function SchemaBrowser({
   );
 }
 
+interface SectionHeaderProps {
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  open: boolean;
+  count: number;
+  /** Search-driven force-open: clicking does nothing while locked. */
+  locked: boolean;
+  onToggle: () => void;
+}
+
+function SectionHeader({ label, icon: Icon, open, count, locked, onToggle }: SectionHeaderProps) {
+  return (
+    <button
+      type="button"
+      onClick={locked ? undefined : onToggle}
+      disabled={locked}
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-muted transition-colors hover:bg-elevated hover:text-fg disabled:hover:bg-transparent disabled:hover:text-fg-muted"
+    >
+      {open ? (
+        <ChevronDown className="h-3 w-3 shrink-0" />
+      ) : (
+        <ChevronRight className="h-3 w-3 shrink-0" />
+      )}
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span>{label}</span>
+      <span className="ml-auto text-[10px] tabular-nums text-fg-subtle">{count}</span>
+    </button>
+  );
+}
+
 interface TableNodeProps {
   table: TableInfo;
+  filter: string;
   expanded: boolean;
   onToggle: () => void;
   onSelect: ((identifier: string) => void) | undefined;
-  onContextMenu: ((event: ReactMouseEvent<HTMLLIElement>) => void) | undefined;
+  onContextMenu: ((event: ReactMouseEvent<HTMLDivElement>) => void) | undefined;
 }
 
-function TableNode({ table, expanded, onToggle, onSelect, onContextMenu }: TableNodeProps) {
+function TableNode({
+  table,
+  filter,
+  expanded,
+  onToggle,
+  onSelect,
+  onContextMenu,
+}: TableNodeProps) {
   return (
-    <li onContextMenu={onContextMenu}>
-      <div className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-panel">
+    <div onContextMenu={onContextMenu}>
+      <div className="group flex items-center gap-1.5 pl-2 pr-2 transition-colors hover:bg-elevated">
         <button
           type="button"
           onClick={onToggle}
-          className="text-fg-subtle"
-          aria-label={expanded ? 'Collapse' : 'Expand'}
+          className="text-fg-subtle hover:text-fg"
+          aria-label={expanded ? 'Collapse columns' : 'Expand columns'}
         >
-          {expanded ? '▾' : '▸'}
+          {expanded ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
         </button>
         {onSelect ? (
           <button
             type="button"
             onClick={() => onSelect(table.name)}
-            className="flex-1 text-left text-fg hover:text-accent"
+            className="flex-1 truncate py-1 text-left font-mono text-[12px] text-fg transition-colors hover:text-accent"
+            title={table.name}
           >
-            {table.name}
+            {highlightMatch(table.name, filter)}
           </button>
         ) : (
-          <span className="flex-1 text-fg">{table.name}</span>
+          <span
+            className="flex-1 truncate py-1 font-mono text-[12px] text-fg"
+            title={table.name}
+          >
+            {highlightMatch(table.name, filter)}
+          </span>
         )}
-        <span className="text-[10px] uppercase tracking-wide text-fg-subtle">{table.kind}</span>
       </div>
       {expanded && (
-        <ul className="ml-4 mt-0.5 flex flex-col gap-0.5">
+        <ul className="flex flex-col">
           {table.columns.map((c) => (
             <li
               key={c.name}
-              className="flex items-center gap-2 px-1 py-0.5 text-fg-muted hover:bg-panel"
+              className="group flex items-center gap-2 py-0.5 pl-9 pr-3 text-fg-muted transition-colors hover:bg-elevated"
             >
               {onSelect ? (
                 <button
                   type="button"
-                  className="flex-1 text-left hover:text-fg"
                   onClick={() => onSelect(`${table.name}.${c.name}`)}
+                  className="flex-1 truncate text-left font-mono text-[11px] hover:text-fg"
+                  title={c.name}
                 >
                   {c.name}
-                  {c.nullable ? '' : ' *'}
+                  {!c.nullable && <span className="ml-0.5 text-danger">*</span>}
                 </button>
               ) : (
-                <span className="flex-1">
+                <span className="flex-1 truncate font-mono text-[11px]" title={c.name}>
                   {c.name}
-                  {c.nullable ? '' : ' *'}
+                  {!c.nullable && <span className="ml-0.5 text-danger">*</span>}
                 </span>
               )}
-              <span className="text-[10px] text-fg-subtle">{c.sqlType}</span>
+              <span className="shrink-0 font-mono text-[10px] uppercase text-fg-subtle">
+                {c.sqlType}
+              </span>
             </li>
           ))}
           {table.columns.length === 0 && (
-            <li className="px-1 py-0.5 text-fg-subtle italic">no columns</li>
+            <li className="py-1 pl-9 italic text-fg-subtle">no columns</li>
           )}
         </ul>
       )}
-    </li>
+    </div>
   );
 }

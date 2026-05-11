@@ -43,6 +43,7 @@
     "@codemirror/view": "^6.35.0",
     "@tanstack/react-virtual": "^3.10.0",
     "codemirror": "^6.0.0",
+    "lucide-react": "^0.460.0",
     "zustand": "^5.0.0"
   },
   "peerDependencies": {
