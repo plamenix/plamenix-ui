@@ -1,4 +1,5 @@
 import { CryptBadge } from './CryptBadge';
+import { SqlEditor } from './SqlEditor';
 import type { CryptState } from './types';
 
 export interface QueryPanelProps {
@@ -18,8 +19,8 @@ export interface QueryPanelProps {
 
 /**
  * SQL editor and execute/disconnect buttons. Used inside the main shell
- * once a session is open. The CodeMirror upgrade will replace the bare
- * `<textarea>` once it lands.
+ * once a session is open. The CodeMirror 6 editor lives in
+ * {@link SqlEditor}; this panel only owns the surrounding chrome.
  */
 export function QueryPanel({
   sessionId,
@@ -47,11 +48,7 @@ export function QueryPanel({
           Disconnect
         </button>
       </div>
-      <textarea
-        className="input min-h-[120px] font-mono text-sm"
-        value={sql}
-        onChange={(e) => onSqlChange(e.target.value)}
-      />
+      <SqlEditor value={sql} onChange={onSqlChange} busy={busy} />
       <button
         className="self-start rounded bg-amber-600 px-4 py-2 font-medium text-zinc-950 disabled:opacity-50"
         disabled={busy}
