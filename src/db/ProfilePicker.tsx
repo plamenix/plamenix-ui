@@ -55,8 +55,8 @@ export function ProfilePicker({
     selectedProfile !== undefined &&
     selectedProfile.name !== name.trim();
   return (
-    <section className="flex flex-col gap-2 rounded border border-zinc-800 p-4">
-      <h2 className="text-sm font-medium text-zinc-300">Saved profiles</h2>
+    <section className="flex flex-col gap-2 rounded border border-edge bg-panel p-4">
+      <h2 className="text-sm font-medium text-fg">Saved profiles</h2>
       <div className="flex flex-wrap items-center gap-2">
         <select
           className="input min-w-[12rem] flex-1"
@@ -82,7 +82,7 @@ export function ProfilePicker({
         />
         <button
           type="button"
-          className="rounded bg-emerald-700 px-3 py-1 text-sm text-zinc-50 disabled:opacity-50"
+          className="rounded bg-accent px-3 py-1 text-sm text-fg-inverted hover:bg-accent-hover disabled:opacity-50"
           disabled={!canSave}
           onClick={onSave}
         >
@@ -91,7 +91,7 @@ export function ProfilePicker({
         {onRename && (
           <button
             type="button"
-            className="rounded border border-zinc-600 px-3 py-1 text-sm text-zinc-300 disabled:opacity-50"
+            className="rounded border border-edge px-3 py-1 text-sm text-fg-muted hover:bg-elevated disabled:opacity-50"
             disabled={!canRename}
             onClick={onRename}
             title="Rename the selected profile without overwriting its other fields"
@@ -101,7 +101,7 @@ export function ProfilePicker({
         )}
         <button
           type="button"
-          className="rounded border border-red-700 px-3 py-1 text-sm text-red-300 disabled:opacity-50"
+          className="rounded border border-danger px-3 py-1 text-sm text-danger hover:bg-danger-subtle disabled:opacity-50"
           disabled={busy || !hasSelection}
           onClick={onDelete}
         >

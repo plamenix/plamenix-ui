@@ -52,10 +52,10 @@ export function TableContextMenu({ x, y, title, onAction, onClose }: TableContex
     <div
       ref={ref}
       role="menu"
-      className="fixed z-50 min-w-[10rem] rounded border border-zinc-700 bg-zinc-900 py-1 text-xs text-zinc-200 shadow-lg"
+      className="fixed z-50 min-w-[10rem] rounded border border-edge bg-elevated py-1 text-xs text-fg shadow-lg"
       style={{ left: `${x}px`, top: `${y}px` }}
     >
-      <div className="border-b border-zinc-800 px-3 py-1 text-[10px] uppercase tracking-wide text-zinc-500">
+      <div className="border-b border-edge px-3 py-1 text-[10px] uppercase tracking-wide text-fg-subtle">
         {title}
       </div>
       {ITEMS.map((item) => (
@@ -63,8 +63,8 @@ export function TableContextMenu({ x, y, title, onAction, onClose }: TableContex
           key={item.action}
           type="button"
           role="menuitem"
-          className={`block w-full px-3 py-1 text-left hover:bg-zinc-800 ${
-            item.tone === 'danger' ? 'text-red-300' : ''
+          className={`block w-full px-3 py-1 text-left hover:bg-panel ${
+            item.tone === 'danger' ? 'text-danger' : ''
           }`}
           onClick={() => {
             onAction(item.action);

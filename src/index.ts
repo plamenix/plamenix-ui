@@ -43,4 +43,21 @@ export {
   type TabsStore,
   type TabsStoreActions,
 } from './db/tabs-store';
+
+export {
+  ACCENT_COLORS,
+  type AccentDef,
+  type AccentId,
+} from './theme/accent-colors';
+export {
+  applyThemeToDocument,
+  useThemeStore,
+  type ThemeMode,
+  type ThemeState,
+} from './theme/theme-store';
+export {
+  SettingsButton,
+  SettingsPanel,
+  type SettingsPanelProps,
+} from './theme/SettingsPanel';
 export { ResultTable, type ResultTableProps } from './db/ResultTable';

@@ -64,13 +64,13 @@ export function SchemaBrowser({
         : schema.tables.filter((t) => t.name.toLowerCase().includes(filterLower));
 
   return (
-    <aside className="flex h-full flex-col gap-2 border-r border-zinc-800 bg-zinc-950 p-3 text-xs">
+    <aside className="flex h-full flex-col gap-2 border-r border-edge bg-canvas p-3 text-xs">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-zinc-300">Schema</h2>
+        <h2 className="text-sm font-medium text-fg">Schema</h2>
         {onRefresh && (
           <button
             type="button"
-            className="rounded border border-zinc-700 px-2 py-0.5 text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+            className="rounded border border-edge px-2 py-0.5 text-fg-muted hover:bg-panel disabled:opacity-50"
             disabled={busy}
             onClick={onRefresh}
             aria-label="Refresh schema"
@@ -88,9 +88,9 @@ export function SchemaBrowser({
       />
       <div className="flex-1 overflow-y-auto">
         {schema === null ? (
-          <p className="text-zinc-500">No schema loaded.</p>
+          <p className="text-fg-subtle">No schema loaded.</p>
         ) : tables.length === 0 ? (
-          <p className="text-zinc-500">
+          <p className="text-fg-subtle">
             {schema.tables.length === 0 ? 'No user tables.' : 'No matches.'}
           </p>
         ) : (
@@ -139,11 +139,11 @@ interface TableNodeProps {
 function TableNode({ table, expanded, onToggle, onSelect, onContextMenu }: TableNodeProps) {
   return (
     <li onContextMenu={onContextMenu}>
-      <div className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-zinc-900">
+      <div className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-panel">
         <button
           type="button"
           onClick={onToggle}
-          className="text-zinc-500"
+          className="text-fg-subtle"
           aria-label={expanded ? 'Collapse' : 'Expand'}
         >
           {expanded ? '▾' : '▸'}
@@ -152,26 +152,26 @@ function TableNode({ table, expanded, onToggle, onSelect, onContextMenu }: Table
           <button
             type="button"
             onClick={() => onSelect(table.name)}
-            className="flex-1 text-left text-zinc-200 hover:text-zinc-50"
+            className="flex-1 text-left text-fg hover:text-accent"
           >
             {table.name}
           </button>
         ) : (
-          <span className="flex-1 text-zinc-200">{table.name}</span>
+          <span className="flex-1 text-fg">{table.name}</span>
         )}
-        <span className="text-[10px] uppercase tracking-wide text-zinc-500">{table.kind}</span>
+        <span className="text-[10px] uppercase tracking-wide text-fg-subtle">{table.kind}</span>
       </div>
       {expanded && (
         <ul className="ml-4 mt-0.5 flex flex-col gap-0.5">
           {table.columns.map((c) => (
             <li
               key={c.name}
-              className="flex items-center gap-2 px-1 py-0.5 text-zinc-400 hover:bg-zinc-900"
+              className="flex items-center gap-2 px-1 py-0.5 text-fg-muted hover:bg-panel"
             >
               {onSelect ? (
                 <button
                   type="button"
-                  className="flex-1 text-left hover:text-zinc-200"
+                  className="flex-1 text-left hover:text-fg"
                   onClick={() => onSelect(`${table.name}.${c.name}`)}
                 >
                   {c.name}
@@ -183,11 +183,11 @@ function TableNode({ table, expanded, onToggle, onSelect, onContextMenu }: Table
                   {c.nullable ? '' : ' *'}
                 </span>
               )}
-              <span className="text-[10px] text-zinc-500">{c.sqlType}</span>
+              <span className="text-[10px] text-fg-subtle">{c.sqlType}</span>
             </li>
           ))}
           {table.columns.length === 0 && (
-            <li className="px-1 py-0.5 text-zinc-600 italic">no columns</li>
+            <li className="px-1 py-0.5 text-fg-subtle italic">no columns</li>
           )}
         </ul>
       )}

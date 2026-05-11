@@ -29,7 +29,7 @@ export function ConnectionPanel({
   passwordHint,
 }: ConnectionPanelProps) {
   return (
-    <section className="grid grid-cols-2 gap-3 rounded border border-zinc-800 p-4">
+    <section className="grid grid-cols-2 gap-3 rounded border border-edge bg-panel p-4">
       <Field label="Host">
         <input
           className="input"
@@ -67,7 +67,7 @@ export function ConnectionPanel({
           onChange={(e) => onChange('password', e.target.value)}
         />
         {passwordHint && (
-          <p className="mt-1 text-[10px] text-zinc-500">{passwordHint}</p>
+          <p className="mt-1 text-[10px] text-fg-subtle">{passwordHint}</p>
         )}
       </Field>
       <Field label="Encryption key (optional)" className="col-span-2">
@@ -79,7 +79,7 @@ export function ConnectionPanel({
           placeholder="Leave empty for unencrypted databases"
         />
       </Field>
-      <label className="col-span-2 flex items-center gap-2 text-sm text-zinc-300">
+      <label className="col-span-2 flex items-center gap-2 text-sm text-fg-muted">
         <input
           type="checkbox"
           checked={form.encryptionRequired}
@@ -87,7 +87,7 @@ export function ConnectionPanel({
         />
         Require encryption (refuse to connect if database is not encrypted)
       </label>
-      <label className="col-span-2 flex items-center gap-2 text-sm text-zinc-300">
+      <label className="col-span-2 flex items-center gap-2 text-sm text-fg-muted">
         <input
           type="checkbox"
           checked={form.pureRust}
@@ -96,7 +96,7 @@ export function ConnectionPanel({
         Pure-Rust mode (no fbclient required)
       </label>
       <button
-        className="col-span-2 rounded bg-amber-600 px-4 py-2 font-medium text-zinc-950 disabled:opacity-50"
+        className="col-span-2 rounded bg-accent px-4 py-2 font-medium text-fg-inverted hover:bg-accent-hover disabled:opacity-50"
         disabled={busy}
         onClick={onSubmit}
       >

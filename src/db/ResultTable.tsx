@@ -28,8 +28,8 @@ const OVERSCAN = 12;
 export function ResultTable({ result, height = 480 }: ResultTableProps) {
   if ('Affected' in result) {
     return (
-      <div className="rounded border border-zinc-800 p-3 text-sm text-zinc-300">
-        Affected rows: <span className="font-mono">{result.Affected.rows}</span>
+      <div className="rounded border border-edge bg-panel p-3 text-sm text-fg-muted">
+        Affected rows: <span className="font-mono text-fg">{result.Affected.rows}</span>
       </div>
     );
   }
@@ -59,17 +59,17 @@ function VirtualRows({ columns, rows, height }: VirtualRowsProps) {
   const paddingBottom = totalSize - (items.at(-1)?.end ?? 0);
 
   return (
-    <div className="rounded border border-zinc-800">
-      <div className="border-b border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-400">
+    <div className="rounded border border-edge bg-panel">
+      <div className="border-b border-edge bg-panel px-3 py-1 text-xs text-fg-muted">
         {rows.length.toLocaleString()} row{rows.length === 1 ? '' : 's'}
       </div>
       <div
         ref={parentRef}
-        className="overflow-auto"
+        className="overflow-auto bg-canvas"
         style={{ height: `${height}px`, contain: 'strict' }}
       >
         <table className="min-w-full border-collapse text-sm">
-          <thead className="sticky top-0 z-10 bg-zinc-900 text-left text-xs uppercase text-zinc-400 shadow-[0_1px_0_0_rgb(39,39,42)]">
+          <thead className="sticky top-0 z-10 bg-panel text-left text-xs uppercase text-fg-muted shadow-[0_1px_0_0_var(--color-edge)]">
             <tr>
               {columns.map((col) => (
                 <th key={col.name} className="px-3 py-2 font-medium whitespace-nowrap">
@@ -93,13 +93,13 @@ function VirtualRows({ columns, rows, height }: VirtualRowsProps) {
                   data-index={virtualRow.index}
                   ref={virtualizer.measureElement}
                   className={
-                    virtualRow.index % 2 === 0 ? 'bg-zinc-950' : 'bg-zinc-900/50'
+                    virtualRow.index % 2 === 0 ? 'bg-canvas' : 'bg-[var(--color-row-alt)]'
                   }
                 >
                   {row.cells.map((cell, j) => (
                     <td
                       key={j}
-                      className="px-3 py-1.5 font-mono text-xs text-zinc-200 whitespace-nowrap"
+                      className="px-3 py-1.5 font-mono text-xs text-fg whitespace-nowrap"
                     >
                       {renderCell(cell)}
                     </td>

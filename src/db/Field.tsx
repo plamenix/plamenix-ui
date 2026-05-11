@@ -12,7 +12,7 @@ export interface FieldProps {
 /** A labelled wrapper around a form control. */
 export function Field({ label, className, children }: FieldProps) {
   return (
-    <label className={`flex flex-col gap-1 text-xs text-zinc-400 ${className ?? ''}`}>
+    <label className={`flex flex-col gap-1 text-xs text-fg-muted ${className ?? ''}`}>
       <span>{label}</span>
       {children}
     </label>

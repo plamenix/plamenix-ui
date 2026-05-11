@@ -1,0 +1,173 @@
+/* Plamenix theme system.
+ *
+ * Light theme lives on `:root`. Dark theme overrides on `.dark`. JS
+ * toggles the class on <html> via the theme store; CSS variables flip
+ * accordingly. Tailwind 4 picks up the @theme block below and emits
+ * utility classes for every semantic token.
+ *
+ * Accent overrides live in 10 `.accent-*` classes on <html>. The
+ * accent classes ride on top of the light/dark base and only override
+ * the four accent-related variables.
+ *
+ * Layout: keep token additions in dependency order. Base palette
+ * first, accents second, role tokens (bg/text/border) third.
+ */
+
+/* This file overlays theme tokens onto a Tailwind 4 build. Import
+ * Tailwind first from the consuming app's entry CSS, then `@import`
+ * this file. Importing Tailwind here too would duplicate utilities. */
+
+/* ── Light theme (default) ───────────────────────────────────────── */
+:root {
+  --color-canvas: #f5f6f8;
+  --color-panel: #eceef1;
+  --color-elevated: #f5f6f8;
+  --color-inset: #dfe1e6;
+  --color-edge: #cdd1d8;
+  --color-edge-subtle: #dfe1e6;
+
+  --color-accent: #3b82f6;
+  --color-accent-hover: #2563eb;
+  --color-accent-subtle: rgba(59, 130, 246, 0.1);
+  --color-accent-row-hover: rgba(59, 130, 246, 0.06);
+
+  --color-fg: #111827;
+  --color-fg-muted: #4b5563;
+  --color-fg-subtle: #6b7280;
+  --color-fg-inverted: #ffffff;
+
+  --color-danger: #ef4444;
+  --color-danger-subtle: rgba(239, 68, 68, 0.1);
+  --color-success: #22c55e;
+  --color-success-subtle: rgba(34, 197, 94, 0.1);
+  --color-warning: #f59e0b;
+  --color-warning-subtle: rgba(245, 158, 11, 0.1);
+
+  --color-code: #e8eaef;
+  --color-row-hover: var(--color-accent-row-hover);
+  --color-row-alt: #eff0f3;
+}
+
+/* ── Dark theme ──────────────────────────────────────────────────── */
+.dark {
+  --color-canvas: #0f1117;
+  --color-panel: #161922;
+  --color-elevated: #1c1f2b;
+  --color-inset: #0c0d12;
+  --color-edge: #2a2d3a;
+  --color-edge-subtle: #1f222e;
+
+  --color-accent: #3b82f6;
+  --color-accent-hover: #60a5fa;
+  --color-accent-subtle: rgba(59, 130, 246, 0.12);
+  --color-accent-row-hover: rgba(59, 130, 246, 0.06);
+
+  --color-fg: #e5e7eb;
+  --color-fg-muted: #9ca3af;
+  --color-fg-subtle: #6b7280;
+  --color-fg-inverted: #111827;
+
+  --color-danger: #f87171;
+  --color-danger-subtle: rgba(248, 113, 113, 0.12);
+  --color-success: #4ade80;
+  --color-success-subtle: rgba(74, 222, 128, 0.12);
+  --color-warning: #fbbf24;
+  --color-warning-subtle: rgba(251, 191, 36, 0.12);
+
+  --color-code: #12141c;
+  --color-row-hover: var(--color-accent-row-hover);
+  --color-row-alt: #13151d;
+}
+
+/* ── 10 accent presets ───────────────────────────────────────────── */
+/* Only `--color-accent*` change; rest of palette is left to the
+ * light/dark base above. Light and dark share the same set name but
+ * pick different hue/luma pairs. */
+
+:root.accent-blue,
+.dark.accent-blue { --color-accent: #3b82f6; --color-accent-hover: #2563eb; --color-accent-subtle: rgba(59,130,246,.10); --color-accent-row-hover: rgba(59,130,246,.06); }
+.dark.accent-blue { --color-accent-hover: #60a5fa; --color-accent-subtle: rgba(59,130,246,.12); }
+
+:root.accent-indigo { --color-accent: #6366f1; --color-accent-hover: #4f46e5; --color-accent-subtle: rgba(99,102,241,.10); --color-accent-row-hover: rgba(99,102,241,.06); }
+.dark.accent-indigo { --color-accent: #818cf8; --color-accent-hover: #a5b4fc; --color-accent-subtle: rgba(129,140,248,.12); --color-accent-row-hover: rgba(129,140,248,.06); }
+
+:root.accent-violet { --color-accent: #8b5cf6; --color-accent-hover: #7c3aed; --color-accent-subtle: rgba(139,92,246,.10); --color-accent-row-hover: rgba(139,92,246,.06); }
+.dark.accent-violet { --color-accent: #a78bfa; --color-accent-hover: #c4b5fd; --color-accent-subtle: rgba(167,139,250,.12); --color-accent-row-hover: rgba(167,139,250,.06); }
+
+:root.accent-purple { --color-accent: #a855f7; --color-accent-hover: #9333ea; --color-accent-subtle: rgba(168,85,247,.10); --color-accent-row-hover: rgba(168,85,247,.06); }
+.dark.accent-purple { --color-accent: #c084fc; --color-accent-hover: #d8b4fe; --color-accent-subtle: rgba(192,132,252,.12); --color-accent-row-hover: rgba(192,132,252,.06); }
+
+:root.accent-rose { --color-accent: #f43f5e; --color-accent-hover: #e11d48; --color-accent-subtle: rgba(244,63,94,.10); --color-accent-row-hover: rgba(244,63,94,.06); }
+.dark.accent-rose { --color-accent: #fb7185; --color-accent-hover: #fda4af; --color-accent-subtle: rgba(251,113,133,.12); --color-accent-row-hover: rgba(251,113,133,.06); }
+
+:root.accent-orange { --color-accent: #f97316; --color-accent-hover: #ea580c; --color-accent-subtle: rgba(249,115,22,.10); --color-accent-row-hover: rgba(249,115,22,.06); }
+.dark.accent-orange { --color-accent: #fb923c; --color-accent-hover: #fdba74; --color-accent-subtle: rgba(251,146,60,.12); --color-accent-row-hover: rgba(251,146,60,.06); }
+
+:root.accent-amber { --color-accent: #d97706; --color-accent-hover: #b45309; --color-accent-subtle: rgba(217,119,6,.10); --color-accent-row-hover: rgba(217,119,6,.06); }
+.dark.accent-amber { --color-accent: #fbbf24; --color-accent-hover: #fcd34d; --color-accent-subtle: rgba(251,191,36,.12); --color-accent-row-hover: rgba(251,191,36,.06); }
+
+:root.accent-emerald { --color-accent: #10b981; --color-accent-hover: #059669; --color-accent-subtle: rgba(16,185,129,.10); --color-accent-row-hover: rgba(16,185,129,.06); }
+.dark.accent-emerald { --color-accent: #34d399; --color-accent-hover: #6ee7b7; --color-accent-subtle: rgba(52,211,153,.12); --color-accent-row-hover: rgba(52,211,153,.06); }
+
+:root.accent-teal { --color-accent: #14b8a6; --color-accent-hover: #0d9488; --color-accent-subtle: rgba(20,184,166,.10); --color-accent-row-hover: rgba(20,184,166,.06); }
+.dark.accent-teal { --color-accent: #2dd4bf; --color-accent-hover: #5eead4; --color-accent-subtle: rgba(45,212,191,.12); --color-accent-row-hover: rgba(45,212,191,.06); }
+
+:root.accent-cyan { --color-accent: #06b6d4; --color-accent-hover: #0891b2; --color-accent-subtle: rgba(6,182,212,.10); --color-accent-row-hover: rgba(6,182,212,.06); }
+.dark.accent-cyan { --color-accent: #22d3ee; --color-accent-hover: #67e8f9; --color-accent-subtle: rgba(34,211,238,.12); --color-accent-row-hover: rgba(34,211,238,.06); }
+
+/* ── Tailwind v4 token bindings ──────────────────────────────────── */
+@theme inline {
+  --color-canvas: var(--color-canvas);
+  --color-panel: var(--color-panel);
+  --color-elevated: var(--color-elevated);
+  --color-inset: var(--color-inset);
+  --color-edge: var(--color-edge);
+  --color-edge-subtle: var(--color-edge-subtle);
+
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-accent-subtle: var(--color-accent-subtle);
+
+  --color-fg: var(--color-fg);
+  --color-fg-muted: var(--color-fg-muted);
+  --color-fg-subtle: var(--color-fg-subtle);
+  --color-fg-inverted: var(--color-fg-inverted);
+
+  --color-danger: var(--color-danger);
+  --color-danger-subtle: var(--color-danger-subtle);
+  --color-success: var(--color-success);
+  --color-success-subtle: var(--color-success-subtle);
+  --color-warning: var(--color-warning);
+  --color-warning-subtle: var(--color-warning-subtle);
+
+  --color-code: var(--color-code);
+  --color-row-hover: var(--color-row-hover);
+  --color-row-alt: var(--color-row-alt);
+}
+
+/* ── Base styles + scrollbars ─────────────────────────────────────── */
+:root,
+.dark {
+  color-scheme: light dark;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-fg);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-edge);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-fg-subtle);
+}

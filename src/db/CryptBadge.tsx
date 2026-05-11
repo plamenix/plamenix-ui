@@ -14,7 +14,7 @@ export interface CryptBadgeProps {
 export function CryptBadge({ state }: CryptBadgeProps) {
   if (state === null) {
     return (
-      <span className="rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
+      <span className="rounded bg-elevated px-2 py-0.5 text-[10px] text-fg-muted">
         checking…
       </span>
     );
@@ -29,12 +29,12 @@ export function CryptBadge({ state }: CryptBadgeProps) {
 function describe(state: CryptState): { label: string; tone: string } {
   switch (state) {
     case 'encrypted':
-      return { label: 'Encrypted', tone: 'bg-emerald-700/40 text-emerald-200' };
+      return { label: 'Encrypted', tone: 'bg-success-subtle text-success' };
     case 'unencrypted':
-      return { label: 'Unencrypted', tone: 'bg-red-800/40 text-red-200' };
+      return { label: 'Unencrypted', tone: 'bg-danger-subtle text-danger' };
     case 'encrypt_in_progress':
-      return { label: 'Encrypting…', tone: 'bg-amber-700/40 text-amber-200' };
+      return { label: 'Encrypting…', tone: 'bg-warning-subtle text-warning' };
     case 'decrypt_in_progress':
-      return { label: 'Decrypting…', tone: 'bg-amber-700/40 text-amber-200' };
+      return { label: 'Decrypting…', tone: 'bg-warning-subtle text-warning' };
   }
 }

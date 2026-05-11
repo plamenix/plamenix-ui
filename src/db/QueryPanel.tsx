@@ -32,16 +32,16 @@ export function QueryPanel({
   onClose,
 }: QueryPanelProps) {
   return (
-    <section className="flex flex-col gap-3 rounded border border-zinc-800 p-4">
-      <div className="flex items-center justify-between text-xs text-zinc-400">
+    <section className="flex flex-col gap-3 rounded border border-edge bg-panel p-4">
+      <div className="flex items-center justify-between text-xs text-fg-muted">
         <span className="flex items-center gap-2">
           <span>
-            session: <code className="font-mono text-zinc-200">{sessionId}</code>
+            session: <code className="font-mono text-fg">{sessionId}</code>
           </span>
           {cryptState !== undefined && <CryptBadge state={cryptState} />}
         </span>
         <button
-          className="rounded border border-zinc-700 px-3 py-1 text-zinc-300 hover:bg-zinc-800"
+          className="rounded border border-edge px-3 py-1 text-fg-muted hover:bg-elevated"
           onClick={onClose}
           disabled={busy}
         >
@@ -50,7 +50,7 @@ export function QueryPanel({
       </div>
       <SqlEditor value={sql} onChange={onSqlChange} busy={busy} />
       <button
-        className="self-start rounded bg-amber-600 px-4 py-2 font-medium text-zinc-950 disabled:opacity-50"
+        className="self-start rounded bg-accent px-4 py-2 font-medium text-fg-inverted hover:bg-accent-hover disabled:opacity-50"
         disabled={busy}
         onClick={onExecute}
       >

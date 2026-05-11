@@ -15,7 +15,7 @@ export interface TabStripProps {
  */
 export function TabStrip({ tabs, activeTabId, onSelect, onClose, onNew }: TabStripProps) {
   return (
-    <div className="flex shrink-0 items-end gap-1 border-b border-zinc-800 bg-zinc-950 px-2 pt-1">
+    <div className="flex shrink-0 items-end gap-1 border-b border-edge bg-canvas px-2 pt-1">
       {tabs.map((t) => (
         <TabButton
           key={t.id}
@@ -27,7 +27,7 @@ export function TabStrip({ tabs, activeTabId, onSelect, onClose, onNew }: TabStr
       ))}
       <button
         type="button"
-        className="mb-1 rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300 hover:bg-zinc-800"
+        className="mb-1 rounded border border-edge px-2 py-0.5 text-xs text-fg-muted hover:bg-panel"
         onClick={onNew}
         aria-label="New tab"
         title="New tab"
@@ -48,8 +48,8 @@ interface TabButtonProps {
 function TabButton({ tab, active, onSelect, onClose }: TabButtonProps) {
   const base = 'flex items-center gap-1 rounded-t border border-b-0 px-2 py-1 text-xs';
   const skin = active
-    ? 'border-zinc-700 bg-zinc-900 text-zinc-100'
-    : 'border-transparent text-zinc-400 hover:bg-zinc-900';
+    ? 'border-edge bg-panel text-fg'
+    : 'border-transparent text-fg-muted hover:bg-panel';
   return (
     <div className={`${base} ${skin}`}>
       <button
@@ -58,7 +58,7 @@ function TabButton({ tab, active, onSelect, onClose }: TabButtonProps) {
         className="max-w-[14rem] truncate"
         title={tab.title}
       >
-        {tab.sessionId !== null && <span className="mr-1 text-emerald-400">●</span>}
+        {tab.sessionId !== null && <span className="mr-1 text-success">●</span>}
         {tab.title}
       </button>
       <button
@@ -67,7 +67,7 @@ function TabButton({ tab, active, onSelect, onClose }: TabButtonProps) {
           e.stopPropagation();
           onClose();
         }}
-        className="text-zinc-500 hover:text-zinc-200"
+        className="text-fg-subtle hover:text-fg"
         aria-label={`Close ${tab.title}`}
       >
         ×
