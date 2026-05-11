@@ -10,6 +10,10 @@ export interface ConnectionPanelProps {
   onChange: <K extends keyof ConnectionForm>(key: K, value: ConnectionForm[K]) => void;
   /** Triggered when the Connect button is pressed. */
   onSubmit: () => void;
+  /** Optional helper text rendered under the password field. Used by
+   *  the desktop edition to flag "leave empty — keyring entry will be
+   *  used" when the selected profile has a stored credential. */
+  passwordHint?: string;
 }
 
 /**
@@ -17,7 +21,13 @@ export interface ConnectionPanelProps {
  * parent component calls into `Transport.invoke('db_connect', …)` (or
  * the web edition's equivalent) inside `onSubmit`.
  */
-export function ConnectionPanel({ form, busy, onChange, onSubmit }: ConnectionPanelProps) {
+export function ConnectionPanel({
+  form,
+  busy,
+  onChange,
+  onSubmit,
+  passwordHint,
+}: ConnectionPanelProps) {
   return (
     <section className="grid grid-cols-2 gap-3 rounded border border-zinc-800 p-4">
       <Field label="Host">
@@ -56,6 +66,9 @@ export function ConnectionPanel({ form, busy, onChange, onSubmit }: ConnectionPa
           value={form.password}
           onChange={(e) => onChange('password', e.target.value)}
         />
+        {passwordHint && (
+          <p className="mt-1 text-[10px] text-zinc-500">{passwordHint}</p>
+        )}
       </Field>
       <Field label="Encryption key (optional)" className="col-span-2">
         <input

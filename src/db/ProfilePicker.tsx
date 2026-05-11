@@ -16,6 +16,11 @@ export interface ProfilePickerProps {
   onNameChange: (value: string) => void;
   onSave: () => void;
   onDelete: () => void;
+  /** Fired when the user clicks Rename. Only enabled when a profile
+   *  is selected AND its stored name differs from the working `name`.
+   *  Distinct from `onSave` so the host can rename without
+   *  overwriting other profile fields with the current form. */
+  onRename?: () => void;
 }
 
 /**
@@ -35,9 +40,20 @@ export function ProfilePicker({
   onNameChange,
   onSave,
   onDelete,
+  onRename,
 }: ProfilePickerProps) {
   const hasSelection = selectedId !== null;
   const canSave = !busy && name.trim() !== '';
+  const selectedProfile = selectedId
+    ? profiles.find((p) => p.id === selectedId)
+    : undefined;
+  const canRename =
+    !busy &&
+    hasSelection &&
+    onRename !== undefined &&
+    name.trim() !== '' &&
+    selectedProfile !== undefined &&
+    selectedProfile.name !== name.trim();
   return (
     <section className="flex flex-col gap-2 rounded border border-zinc-800 p-4">
       <h2 className="text-sm font-medium text-zinc-300">Saved profiles</h2>
@@ -72,6 +88,17 @@ export function ProfilePicker({
         >
           {hasSelection ? 'Save' : 'Save as new'}
         </button>
+        {onRename && (
+          <button
+            type="button"
+            className="rounded border border-zinc-600 px-3 py-1 text-sm text-zinc-300 disabled:opacity-50"
+            disabled={!canRename}
+            onClick={onRename}
+            title="Rename the selected profile without overwriting its other fields"
+          >
+            Rename
+          </button>
+        )}
         <button
           type="button"
           className="rounded border border-red-700 px-3 py-1 text-sm text-red-300 disabled:opacity-50"
