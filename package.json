@@ -41,7 +41,8 @@
     "@codemirror/state": "^6.5.0",
     "@codemirror/view": "^6.35.0",
     "@tanstack/react-virtual": "^3.10.0",
-    "codemirror": "^6.0.0"
+    "codemirror": "^6.0.0",
+    "zustand": "^5.0.0"
   },
   "peerDependencies": {
     "react": "^19",
