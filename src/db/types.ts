@@ -24,6 +24,24 @@ export interface ConnectionForm {
   encryptionRequired: boolean;
 }
 
+/** A saved connection profile.
+ *
+ *  Shape mirrors the `Profile` struct in `plamenix-profiles` after serde
+ *  `rename_all = "camelCase"`. The two `*KeyringRef` fields are optional
+ *  because the web edition's profile store doesn't carry them. */
+export interface Profile {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  encryptionRequired: boolean;
+  pureRust: boolean;
+  passwordKeyringRef?: string;
+  encryptionKeyKeyringRef?: string;
+}
+
 /** Encryption state of the attached database, mirroring
  *  `MON$DATABASE.MON$CRYPT_STATE`. */
 export type CryptState =

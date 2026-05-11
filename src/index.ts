@@ -17,6 +17,7 @@ export type {
   ColumnValue,
   ConnectionForm,
   CryptState,
+  Profile,
   QueryResult,
   Row,
 } from './db/types';
@@ -24,5 +25,6 @@ export { renderCell } from './db/types';
 export { Field, type FieldProps } from './db/Field';
 export { ConnectionPanel, type ConnectionPanelProps } from './db/ConnectionPanel';
 export { CryptBadge, type CryptBadgeProps } from './db/CryptBadge';
+export { ProfilePicker, type ProfilePickerProps } from './db/ProfilePicker';
 export { QueryPanel, type QueryPanelProps } from './db/QueryPanel';
 export { ResultTable, type ResultTableProps } from './db/ResultTable';
