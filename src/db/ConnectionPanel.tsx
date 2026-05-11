@@ -57,6 +57,23 @@ export function ConnectionPanel({ form, busy, onChange, onSubmit }: ConnectionPa
           onChange={(e) => onChange('password', e.target.value)}
         />
       </Field>
+      <Field label="Encryption key (optional)" className="col-span-2">
+        <input
+          className="input"
+          type="password"
+          value={form.encryptionKey}
+          onChange={(e) => onChange('encryptionKey', e.target.value)}
+          placeholder="Leave empty for unencrypted databases"
+        />
+      </Field>
+      <label className="col-span-2 flex items-center gap-2 text-sm text-zinc-300">
+        <input
+          type="checkbox"
+          checked={form.encryptionRequired}
+          onChange={(e) => onChange('encryptionRequired', e.target.checked)}
+        />
+        Require encryption (refuse to connect if database is not encrypted)
+      </label>
       <label className="col-span-2 flex items-center gap-2 text-sm text-zinc-300">
         <input
           type="checkbox"

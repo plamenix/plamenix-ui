@@ -15,7 +15,22 @@ export interface ConnectionForm {
   user: string;
   password: string;
   pureRust: boolean;
+  /** Optional encryption key for at-rest-encrypted databases.
+   *  Empty string means "no key supplied"; the host treats `''` and
+   *  `undefined` identically. */
+  encryptionKey: string;
+  /** When true, the host refuses to connect to a database whose
+   *  `MON$CRYPT_STATE` is not `1` (encrypted). */
+  encryptionRequired: boolean;
 }
+
+/** Encryption state of the attached database, mirroring
+ *  `MON$DATABASE.MON$CRYPT_STATE`. */
+export type CryptState =
+  | 'unencrypted'
+  | 'encrypted'
+  | 'decrypt_in_progress'
+  | 'encrypt_in_progress';
 
 /** Column metadata as reported by Firebird. */
 export interface ColumnDescription {
