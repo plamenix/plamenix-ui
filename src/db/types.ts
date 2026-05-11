@@ -74,6 +74,30 @@ export type QueryResult =
   | { Rows: { columns: ColumnDescription[]; rows: Row[] } }
   | { Affected: { rows: number } };
 
+/** Catalogue of tables and views visible to the active session.
+ *  Mirrors `plamenix_types::Schema`. */
+export interface Schema {
+  tables: TableInfo[];
+}
+
+/** Persistent base table vs view, per `RDB$RELATION_TYPE`. */
+export type TableKind = 'table' | 'view';
+
+/** One table or view from `RDB$RELATIONS`. */
+export interface TableInfo {
+  name: string;
+  kind: TableKind;
+  columns: ColumnInfo[];
+}
+
+/** One column from `RDB$RELATION_FIELDS`/`RDB$FIELDS`. */
+export interface ColumnInfo {
+  name: string;
+  position: number;
+  sqlType: string;
+  nullable: boolean;
+}
+
 /** Renders a cell value as a string for display. */
 export function renderCell(cell: ColumnValue): string {
   switch (cell.type) {
