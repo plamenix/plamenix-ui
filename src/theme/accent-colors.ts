@@ -24,6 +24,19 @@ export type AccentId =
   | 'teal'
   | 'cyan';
 
+/** Returns the swatch hex for `id` in the given mode, or `undefined` if
+ *  `id` is null or not in the palette. Convenience for renderers that
+ *  paint a colour directly (e.g. tab status dots). */
+export function swatchFor(
+  id: string | null | undefined,
+  mode: 'dark' | 'light',
+): string | undefined {
+  if (!id) return undefined;
+  const entry = ACCENT_COLORS.find((c) => c.id === id);
+  if (!entry) return undefined;
+  return mode === 'dark' ? entry.swatchDark : entry.swatchLight;
+}
+
 export const ACCENT_COLORS: readonly AccentDef[] = [
   { id: 'blue', name: 'Blue', swatchLight: '#3b82f6', swatchDark: '#3b82f6' },
   { id: 'indigo', name: 'Indigo', swatchLight: '#6366f1', swatchDark: '#818cf8' },

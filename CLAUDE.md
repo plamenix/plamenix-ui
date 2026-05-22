@@ -54,8 +54,9 @@ Package manager is **pnpm**. Lockfile is `pnpm-lock.yaml`. Do not commit
 - Type-only imports: `import type { Foo } from '...'`. Enforced by
   ESLint.
 - Comments explain *why*, never *what*. Identifiers carry the *what*.
-- No `console.*` in shipping code (lint warns). Use a logger primitive
-  once one exists.
+- No `console.*` in shipping code (lint warns). Use `getLogger(scope)`
+  from `src/log/`; the host edition installs its own sink via
+  `setLogSink`.
 
 ## Public API discipline
 

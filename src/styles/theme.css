@@ -50,10 +50,10 @@
 
 /* ── Dark theme ──────────────────────────────────────────────────── */
 .dark {
-  --color-canvas: #0f1117;
-  --color-panel: #161922;
-  --color-elevated: #1c1f2b;
-  --color-inset: #0c0d12;
+  --color-canvas: #13161f;
+  --color-panel: #1a1d28;
+  --color-elevated: #20242f;
+  --color-inset: #0f1117;
   --color-edge: #2a2d3a;
   --color-edge-subtle: #1f222e;
 
@@ -170,4 +170,45 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-fg-subtle);
+}
+
+/* Every interactive element gets the pointer cursor by default. Browsers
+   don't ship this for `button` / `input[type=checkbox|radio]` / `select`
+   — the IDE has hundreds of those, so default it here once instead of
+   sprinkling `cursor-pointer` Tailwind utilities at every call site.
+   Disabled controls fall back to `not-allowed` per their own rules. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+[role="tab"]:not([aria-disabled="true"]),
+[role="menuitem"]:not([aria-disabled="true"]),
+[role="menuitemcheckbox"]:not([aria-disabled="true"]),
+[role="menuitemradio"]:not([aria-disabled="true"]),
+[role="option"]:not([aria-disabled="true"]),
+[role="checkbox"]:not([aria-disabled="true"]),
+[role="radio"]:not([aria-disabled="true"]),
+[role="switch"]:not([aria-disabled="true"]),
+[role="link"]:not([aria-disabled="true"]),
+a[href],
+label[for],
+summary,
+select:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+input[type="submit"]:not(:disabled),
+input[type="button"]:not(:disabled),
+input[type="reset"]:not(:disabled),
+input[type="file"]:not(:disabled),
+input[type="color"]:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"],
+select:disabled,
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled,
+input[type="submit"]:disabled,
+input[type="button"]:disabled,
+input[type="reset"]:disabled {
+  cursor: not-allowed;
 }

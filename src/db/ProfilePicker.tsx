@@ -1,5 +1,26 @@
 import type { Profile } from './types';
 
+function formatRelativeShort(ms: number): string {
+  if (ms <= 0) return '';
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  if (diff < 30 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`;
+  return `${Math.floor(diff / (30 * 86_400_000))}mo ago`;
+}
+
+/** Returns the short "used 12m ago" / "disc 3h ago" suffix for the
+ *  profile picker option label. Empty when the profile has never been
+ *  touched. */
+function profileTouchSuffix(profile: Profile): string {
+  const used = profile.lastUsedAt ?? 0;
+  const disc = profile.lastDisconnectedAt ?? 0;
+  if (used === 0 && disc === 0) return '';
+  if (disc > used) return `disc ${formatRelativeShort(disc)}`;
+  return `used ${formatRelativeShort(used)}`;
+}
+
 export interface ProfilePickerProps {
   /** All currently saved profiles. The dropdown renders one option per
    *  entry, plus a sentinel "New connection" option for `null`. */
@@ -66,11 +87,14 @@ export function ProfilePicker({
           aria-label="Select saved profile"
         >
           <option value="">New connection…</option>
-          {profiles.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
+          {profiles.map((p) => {
+            const suffix = profileTouchSuffix(p);
+            return (
+              <option key={p.id} value={p.id}>
+                {suffix ? `${p.name} · ${suffix}` : p.name}
+              </option>
+            );
+          })}
         </select>
         <input
           className="input min-w-[10rem] flex-1"

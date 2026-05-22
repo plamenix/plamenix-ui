@@ -1,13 +1,58 @@
 /**
  * Shared types for the database UI surface.
  *
- * These mirror the shapes returned by `plamenix-db` (Rust) over either
- * transport. Keep them in sync with `plamenix-core/crates/plamenix-db`
- * — once Specta-generated types land, this file will be replaced by the
- * generated output and deleted by hand.
+ * Wire shapes are owned by Rust (`plamenix-core`) and emitted into
+ * `generated.ts` by `plamenix-ts-gen`. This module re-exports the
+ * generated names alongside the UI-only types that have no Rust mirror
+ * (`ConnectionForm`, `TableAction`) and the `renderCell` helper used
+ * throughout the table surface.
  */
 
-/** State backing the connection form. */
+export type {
+  AttachmentInfo,
+  BlobRef,
+  Column as ColumnDescription,
+  ColumnInfo,
+  ColumnValue,
+  CryptState,
+  DatabaseAlias,
+  DatabaseStats,
+  DomainInfo,
+  GeneratorInfo,
+  HistoryEntry,
+  ListAliasesResult,
+  MonDatabase,
+  ProcedureInfo,
+  Profile,
+  ProfileId,
+  QueryResult,
+  Row,
+  Schema,
+  SessionId,
+  StatementInfo,
+  StatementOutcome,
+  TabId,
+  TableInfo,
+  TableKind,
+  TestConnectionResult,
+  TriggerInfo,
+} from './generated';
+
+import type {
+  ColumnValue,
+  DomainInfo,
+  GeneratorInfo,
+  ProcedureInfo,
+  TableInfo,
+  TriggerInfo,
+} from './generated';
+
+/** State backing the connection form.
+ *
+ *  Distinct from the Rust `ConnectionConfig`: the form additionally
+ *  carries `pureRust` and `password` / `encryptionKey` in cleartext, and
+ *  uses `camelCase` field names because it round-trips through the UI
+ *  unchanged. */
 export interface ConnectionForm {
   host: string;
   port: number;
@@ -22,87 +67,96 @@ export interface ConnectionForm {
   /** When true, the host refuses to connect to a database whose
    *  `MON$CRYPT_STATE` is not `1` (encrypted). */
   encryptionRequired: boolean;
+  /** Absolute path to the Firebird native client library
+   *  (`libfbclient.so` / `.dylib` / `fbclient.dll`). Empty string
+   *  means "auto-detect via the usual `PLAMENIX_FBCLIENT_PATH` chain".
+   *  Ignored when `pureRust` is true (rsfbclient's pure-Rust backend
+   *  never loads a native library). */
+  fbclientPath: string;
+  /** Wire charset for the session. Default `UTF8`. Affects how the
+   *  driver decodes legacy single-byte-encoded text columns (e.g.
+   *  `WIN1250` for Croatian / Czech / Polish databases that predate
+   *  UTF8 collations). */
+  charset: string;
 }
 
-/** A saved connection profile.
- *
- *  Shape mirrors the `Profile` struct in `plamenix-profiles` after serde
- *  `rename_all = "camelCase"`. The two `*KeyringRef` fields are optional
- *  because the web edition's profile store doesn't carry them. */
-export interface Profile {
-  id: string;
-  name: string;
-  host: string;
-  port: number;
-  database: string;
-  user: string;
-  encryptionRequired: boolean;
-  pureRust: boolean;
-  passwordKeyringRef?: string;
-  encryptionKeyKeyringRef?: string;
-}
-
-/** Encryption state of the attached database, mirroring
- *  `MON$DATABASE.MON$CRYPT_STATE`. */
-export type CryptState =
-  | 'unencrypted'
-  | 'encrypted'
-  | 'decrypt_in_progress'
-  | 'encrypt_in_progress';
-
-/** Column metadata as reported by Firebird. */
-export interface ColumnDescription {
-  name: string;
-}
-
-/** One typed cell value in a query result row. */
-export type ColumnValue =
-  | { type: 'null' }
-  | { type: 'text'; value: string }
-  | { type: 'integer'; value: number }
-  | { type: 'float'; value: number }
-  | { type: 'bool'; value: boolean }
-  | { type: 'blob'; value: string };
-
-/** A single result row. */
-export interface Row {
-  cells: ColumnValue[];
-}
-
-/** Result of `db.execute`. */
-export type QueryResult =
-  | { Rows: { columns: ColumnDescription[]; rows: Row[] } }
-  | { Affected: { rows: number } };
-
-/** Catalogue of tables and views visible to the active session.
- *  Mirrors `plamenix_types::Schema`. */
-export interface Schema {
-  tables: TableInfo[];
-}
-
-/** Persistent base table vs view, per `RDB$RELATION_TYPE`. */
-export type TableKind = 'table' | 'view';
-
-/** One table or view from `RDB$RELATIONS`. */
-export interface TableInfo {
-  name: string;
-  kind: TableKind;
-  columns: ColumnInfo[];
-}
-
-/** One column from `RDB$RELATION_FIELDS`/`RDB$FIELDS`. */
-export interface ColumnInfo {
-  name: string;
-  position: number;
-  sqlType: string;
-  nullable: boolean;
-}
+/** Charset choices surfaced by the connection dialog. Values match
+ *  `rsfbclient_core::Charset::from_str` exactly; passing any other
+ *  value yields a "doesn't represent any charset" error at attach
+ *  time. */
+export const SUPPORTED_CHARSETS: readonly string[] = [
+  'UTF8',
+  'ISO8859_1',
+  'ISO8859_2',
+  'ISO8859_3',
+  'ISO8859_4',
+  'ISO8859_5',
+  'ISO8859_6',
+  'ISO8859_7',
+  'ISO8859_13',
+  'WIN1250',
+  'WIN1251',
+  'WIN1252',
+  'WIN1253',
+  'WIN1254',
+  'WIN1256',
+  'WIN1257',
+  'WIN1258',
+  'ASCII',
+  'KOI8R',
+  'KOI8U',
+  'EUCJP',
+  'BIG5_2003',
+];
 
 /** DDL action the schema browser surfaces on its per-table context
  *  menu. The browser itself never executes SQL — the host translates
  *  the action into a concrete statement and routes it through the
  *  usual `execute` path. */
 export type TableAction = 'drop' | 'alter' | 'create-index';
+
+/** Right-click DDL action across every schema-browser object kind.
+ *  The schema browser emits one of these and the host turns it into a
+ *  concrete SQL template (or, for `drop`, runs it after confirm). */
+export type SchemaAction =
+  | {
+      kind: 'table';
+      action: 'drop' | 'alter' | 'create-index' | 'recreate' | 'recompute-statistics';
+      target: TableInfo;
+    }
+  | {
+      kind: 'view';
+      action: 'drop' | 'alter' | 'show-source';
+      target: TableInfo;
+    }
+  | {
+      kind: 'procedure';
+      action: 'execute' | 'alter' | 'drop' | 'show-source';
+      target: ProcedureInfo;
+    }
+  | {
+      kind: 'trigger';
+      action: 'toggle-active' | 'drop' | 'show-source';
+      target: TriggerInfo;
+    }
+  | {
+      kind: 'generator';
+      action: 'next-value' | 'reset' | 'drop';
+      target: GeneratorInfo;
+    }
+  | {
+      kind: 'generator';
+      action: 'set-value';
+      target: GeneratorInfo;
+      /** New target value for the generator counter. */
+      value: number;
+      /** Active engine version string (e.g. `'3.0.7'`). Drives the
+       *  dialect choice in {@link schemaDdl}: ALTER SEQUENCE RESTART
+       *  WITH for FB 3+, SET GENERATOR TO for older. `null` defaults
+       *  to the modern form. */
+      engineVersion: string | null;
+    }
+  | { kind: 'domain'; action: 'alter-type' | 'drop'; target: DomainInfo };
 
 /** Renders a cell value as a string for display. */
 export function renderCell(cell: ColumnValue): string {
@@ -112,11 +166,12 @@ export function renderCell(cell: ColumnValue): string {
     case 'text':
       return cell.value;
     case 'integer':
-    case 'float':
       return String(cell.value);
+    case 'float':
+      return cell.value === null ? 'NULL' : String(cell.value);
     case 'bool':
       return cell.value ? 'true' : 'false';
     case 'blob':
-      return `0x${cell.value.slice(0, 32)}${cell.value.length > 32 ? '…' : ''}`;
+      return `0x${cell.value.peekHex}${cell.value.sizeBytes > cell.value.peekHex.length / 2 ? '…' : ''}`;
   }
 }
