@@ -36,6 +36,11 @@ export type {
   TableKind,
   TestConnectionResult,
   TriggerInfo,
+  TxConfig,
+  TxIsolation,
+  TxLocking,
+  TxMode,
+  TxStatus,
 } from './generated';
 
 import type {

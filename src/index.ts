@@ -52,6 +52,11 @@ export type {
   TableKind,
   TestConnectionResult,
   TriggerInfo,
+  TxConfig,
+  TxIsolation,
+  TxLocking,
+  TxMode,
+  TxStatus,
 } from './db/types';
 export { renderCell, SUPPORTED_CHARSETS } from './db/types';
 export {
@@ -74,10 +79,7 @@ export {
   pluginContributionsToSidebarPanels,
   type SidebarPanelContributionPayload,
 } from './plugins/sidebar-panel-contract';
-export {
-  flattenTipPacks,
-  type TipPackContributionPayload,
-} from './db/tip-pack-contract';
+export { flattenTipPacks, type TipPackContributionPayload } from './db/tip-pack-contract';
 export {
   registerBuiltinFirebirdTips,
   unregisterBuiltinFirebirdTips,
@@ -89,10 +91,7 @@ export {
   type SchemaActionDescriptor,
   type SchemaObjectKind,
 } from './db/schema-action-contract';
-export {
-  registerBuiltinDbaToolbox,
-  unregisterBuiltinDbaToolbox,
-} from './db/builtins/dba-toolbox';
+export { registerBuiltinDbaToolbox, unregisterBuiltinDbaToolbox } from './db/builtins/dba-toolbox';
 export {
   buildCsvBody,
   registerBuiltinCsvExport,
@@ -439,31 +438,19 @@ export {
   type ConfirmationRequest,
   type QueryExecutingContext,
 } from './interceptors/query-executing';
-export {
-  cellCommittingChain,
-  type CellCommittingContext,
-} from './interceptors/cell-committing';
+export { cellCommittingChain, type CellCommittingContext } from './interceptors/cell-committing';
 export {
   rowInsertingChain,
   type RowInsertColumnValue,
   type RowInsertingContext,
 } from './interceptors/row-inserting';
-export {
-  rowDeletingChain,
-  type RowDeletingContext,
-} from './interceptors/row-deleting';
+export { rowDeletingChain, type RowDeletingContext } from './interceptors/row-deleting';
 export {
   connectionOpeningChain,
   type ConnectionOpeningContext,
 } from './interceptors/connection-opening';
-export {
-  exportStartingChain,
-  type ExportStartingContext,
-} from './interceptors/export-starting';
-export {
-  editorSavingChain,
-  type EditorSavingContext,
-} from './interceptors/editor-saving';
+export { exportStartingChain, type ExportStartingContext } from './interceptors/export-starting';
+export { editorSavingChain, type EditorSavingContext } from './interceptors/editor-saving';
 export {
   schemaActionApplyingChain,
   type SchemaActionApplyingContext,
@@ -471,11 +458,7 @@ export {
 export { Field, type FieldProps } from './db/Field';
 export { ConnectionPanel, type ConnectionPanelProps } from './db/ConnectionPanel';
 export { ConnectionScreen, type ConnectionScreenProps } from './db/ConnectionScreen';
-export {
-  CommandPalette,
-  type Command,
-  type CommandPaletteProps,
-} from './db/CommandPalette';
+export { CommandPalette, type Command, type CommandPaletteProps } from './db/CommandPalette';
 export { HistoryPanel, type HistoryPanelProps } from './db/HistoryPanel';
 export { ErrorBanner, type ErrorBannerProps } from './db/ErrorBanner';
 export { PluginsSidebar, type PluginsSidebarProps } from './plugins/PluginsSidebar';
@@ -488,10 +471,7 @@ export {
 } from './plugins/builtin-plugin-settings';
 export { AboutButton, type AboutButtonProps } from './about/AboutButton';
 export { AboutPage, type AboutPageProps } from './about/AboutPage';
-export {
-  FilterBuilderModal,
-  type FilterBuilderModalProps,
-} from './db/FilterBuilderModal';
+export { FilterBuilderModal, type FilterBuilderModalProps } from './db/FilterBuilderModal';
 export { HomeButton, type HomeButtonProps } from './db/HomeButton';
 export { AppMenu, type AppMenuItem, type AppMenuProps } from './db/AppMenu';
 export {
@@ -499,10 +479,7 @@ export {
   type FirstUsePermissionPromptProps,
   type FirstUsePermissionRequest,
 } from './plugins/FirstUsePermissionPrompt';
-export {
-  PermissionsPanel,
-  type PermissionsPanelProps,
-} from './plugins/PermissionsPanel';
+export { PermissionsPanel, type PermissionsPanelProps } from './plugins/PermissionsPanel';
 export {
   PluginInstallDialog,
   SignatureBanner,
@@ -528,10 +505,7 @@ export {
   type PluginInstallState,
   type UsePluginInstallFlowResult,
 } from './plugins/use-plugin-install-flow';
-export {
-  PluginPanelModal,
-  type PluginPanelModalProps,
-} from './plugins/PluginPanelModal';
+export { PluginPanelModal, type PluginPanelModalProps } from './plugins/PluginPanelModal';
 export type {
   ActivePlugin,
   ActivationInfo,
@@ -543,18 +517,10 @@ export type {
   PluginSupervisionInfo,
   SidebarPanelInfo,
 } from './plugins/types';
-export {
-  parseFirebirdError,
-  errorKindLabel,
-  type FirebirdErrorInfo,
-} from './db/error-info';
+export { parseFirebirdError, errorKindLabel, type FirebirdErrorInfo } from './db/error-info';
 export { CryptBadge, type CryptBadgeProps } from './db/CryptBadge';
 export { ProfilePicker, type ProfilePickerProps } from './db/ProfilePicker';
-export {
-  QueryPanel,
-  type QueryPanelProps,
-  type SessionHealth,
-} from './db/QueryPanel';
+export { QueryPanel, type QueryPanelProps, type SessionHealth } from './db/QueryPanel';
 export {
   DEFAULT_PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
@@ -563,20 +529,9 @@ export {
   type SortDirection,
 } from './db/pagination';
 export { SchemaBrowser, type SchemaBrowserProps } from './db/SchemaBrowser';
-export {
-  ObjectListPage,
-  type ObjectListKind,
-  type ObjectListPageProps,
-} from './db/ObjectListPage';
-export {
-  NewObjectModal,
-  type NewObjectKind,
-  type NewObjectModalProps,
-} from './db/NewObjectModal';
-export {
-  SchemaEditorModal,
-  type SchemaEditorModalProps,
-} from './db/SchemaEditorModal';
+export { ObjectListPage, type ObjectListKind, type ObjectListPageProps } from './db/ObjectListPage';
+export { NewObjectModal, type NewObjectKind, type NewObjectModalProps } from './db/NewObjectModal';
+export { SchemaEditorModal, type SchemaEditorModalProps } from './db/SchemaEditorModal';
 export {
   buildCreateTableSql,
   freshColumnDraft,
@@ -593,10 +548,7 @@ export {
 } from './db/SearchPalette';
 export { SqlEditor, type SqlEditorProps, type BookmarkMap } from './db/SqlEditor';
 export { SqlHighlight, type SqlHighlightProps } from './db/SqlHighlight';
-export {
-  ShortcutsCheatSheet,
-  type ShortcutsCheatSheetProps,
-} from './db/ShortcutsCheatSheet';
+export { ShortcutsCheatSheet, type ShortcutsCheatSheetProps } from './db/ShortcutsCheatSheet';
 export {
   getAltKeyLabel,
   getModKeyLabel,
@@ -624,10 +576,7 @@ export {
   type ConnectionPrefsState,
   type QueryHistoryLimit,
 } from './db/connection-prefs';
-export {
-  ToastViewport,
-  type ToastViewportProps,
-} from './toast/ToastViewport';
+export { ToastViewport, type ToastViewportProps } from './toast/ToastViewport';
 export {
   TOAST_TTL_MS,
   useToastStore,
@@ -648,10 +597,7 @@ export {
   type ConfirmationModalProps,
   type PendingConfirmation,
 } from './db/ConfirmationModal';
-export {
-  DatabaseExportModal,
-  type DatabaseExportModalProps,
-} from './db/DatabaseExportModal';
+export { DatabaseExportModal, type DatabaseExportModalProps } from './db/DatabaseExportModal';
 export {
   runDatabaseExport,
   targetTables,
@@ -701,10 +647,7 @@ export {
   type DdlSourceKind,
   type SchemaDdl,
 } from './db/schema-actions';
-export {
-  DdlViewerModal,
-  type DdlViewerModalProps,
-} from './db/DdlViewerModal';
+export { DdlViewerModal, type DdlViewerModalProps } from './db/DdlViewerModal';
 export { TabStrip, type TabStripProps } from './db/TabStrip';
 export {
   DEFAULT_FORM,
@@ -714,12 +657,7 @@ export {
   type TabsStoreActions,
 } from './db/tabs-store';
 
-export {
-  ACCENT_COLORS,
-  swatchFor,
-  type AccentDef,
-  type AccentId,
-} from './theme/accent-colors';
+export { ACCENT_COLORS, swatchFor, type AccentDef, type AccentId } from './theme/accent-colors';
 export {
   applyThemeToDocument,
   resolveThemeMode,
@@ -737,15 +675,8 @@ export {
   SettingsPanel,
   type SettingsPanelProps,
 } from './theme/SettingsPanel';
-export {
-  WelcomeDashboard,
-  type WelcomeDashboardProps,
-} from './db/WelcomeDashboard';
-export {
-  StatusBar,
-  type StatusBarAttribution,
-  type StatusBarProps,
-} from './db/StatusBar';
+export { WelcomeDashboard, type WelcomeDashboardProps } from './db/WelcomeDashboard';
+export { StatusBar, type StatusBarAttribution, type StatusBarProps } from './db/StatusBar';
 export {
   RECENT_MAX,
   selectRecent,
@@ -754,6 +685,17 @@ export {
   type RecentQuery,
 } from './db/recent-queries';
 export { ResultTable, type ResultTableProps } from './db/ResultTable';
+export { TransactionBar, type TransactionBarProps } from './db/TransactionBar';
+export {
+  TX_LINGERING_MS,
+  TX_STALE_MS,
+  describeTxStatus,
+  formatTxAge,
+  hasUncommittedWork,
+  txAgeLevel,
+  txAgeWarning,
+  type TxAgeLevel,
+} from './db/transaction-status';
 export { BlobViewer, type BlobViewerProps } from './db/BlobViewer';
 export { RowEditorModal, type RowEditorModalProps } from './db/RowEditorModal';
 export { sniffBlob, decodeHex, bytesToBase64, type BlobMime } from './db/blob-sniff';
@@ -763,11 +705,5 @@ export {
   type TableObjectViewProps,
   buildCreateTableDdl,
 } from './db/TableObjectView';
-export {
-  RoutineObjectView,
-  type RoutineObjectViewProps,
-} from './db/RoutineObjectView';
-export {
-  SqlEditorPage,
-  type SqlEditorPageProps,
-} from './db/SqlEditorPage';
+export { RoutineObjectView, type RoutineObjectViewProps } from './db/RoutineObjectView';
+export { SqlEditorPage, type SqlEditorPageProps } from './db/SqlEditorPage';

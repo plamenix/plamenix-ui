@@ -6,6 +6,7 @@ import type {
   Schema,
   StatementOutcome,
   TestConnectionResult,
+  TxStatus,
 } from './types';
 
 /** Default form values used for every fresh tab. Edition consumers
@@ -58,6 +59,11 @@ export interface TabState {
    *  user-resized `ID` column stays at the same width when re-running
    *  the SELECT. */
   columnWidths: Record<string, number>;
+  /** Transaction state for this tab's session, or `null` while
+   *  disconnected. Per tab because each tab owns its own session, so
+   *  one tab can sit in a manual transaction while another commits
+   *  freely. */
+  txStatus: TxStatus | null;
   /** Result of the most recent background liveness ping for this tab.
    *  `'unknown'` until the first probe lands; `'healthy'` while pings
    *  succeed; `'reconnecting'` while a recovery attempt is in flight;
@@ -141,6 +147,7 @@ function freshTab(): TabState {
     schema: null,
     error: null,
     busy: false,
+    txStatus: null,
     form: { ...DEFAULT_FORM },
     selectedProfileId: null,
     profileName: '',
@@ -204,6 +211,9 @@ function inflateTab(saved: PersistedTab): TabState {
     schema: null,
     error: null,
     busy: false,
+    // Never restored: the session it described died with the process,
+    // so a rehydrated tab starts with no transaction.
+    txStatus: null,
     // Merge against DEFAULT_FORM so older persisted shapes pick up
     // newer fields (e.g. `fbclientPath`) with controlled defaults.
     // Secrets are re-cleared after the merge: a build shipped between

@@ -643,3 +643,87 @@ export type TriggerInfo = {
 	 */
 	active: boolean,
 };
+
+/**  How a session's explicit transactions are started. */
+export type TxConfig = {
+	/**  Isolation level. Defaults to read-committed. */
+	isolation: TxIsolation,
+	/**
+	 *  Lock resolution. Defaults to `NoWait` so the UI reports a
+	 *  conflict instead of blocking on it indefinitely.
+	 */
+	locking: TxLocking,
+};
+
+/**
+ *  Isolation level for an explicit transaction.
+ * 
+ *  Firebird's third level, `consistency` (snapshot table stability), is
+ *  intentionally not offered: it takes table-level locks, so one user
+ *  selecting it from a dropdown can stall a shared server.
+ */
+export type TxIsolation = 
+/**
+ *  Sees other transactions' commits as they happen. The cheapest
+ *  option and the right default for interactive work.
+ */
+"readCommitted" | 
+/**
+ *  A stable view of the database from the moment the transaction
+ *  started — Firebird's `concurrency`. Needed for a consistent
+ *  multi-statement export; holds the snapshot, and therefore the
+ *  oldest active transaction, for as long as it is open.
+ */
+"snapshot";
+
+/**  What a statement does when it hits a lock another transaction holds. */
+export type TxLocking = 
+/**
+ *  Block until the other transaction finishes. With `None` the wait
+ *  is unbounded, which is how an editor ends up frozen on a row
+ *  somebody else is editing.
+ */
+{ kind: "wait"; timeoutSecs: number | null } | 
+/**
+ *  Fail immediately on conflict. Predictable for interactive use,
+ *  and the reason a conflicting statement reports rather than hangs.
+ */
+{ kind: "noWait" };
+
+/**  When a session commits the statements the user runs. */
+export type TxMode = 
+/**
+ *  Commit after every statement. The default, and what a user who
+ *  has not thought about transactions expects.
+ */
+"autocommit" | 
+/**
+ *  Hold statements in one transaction until the user commits or
+ *  rolls back. Nothing is written until they say so — including
+ *  DDL, which Firebird makes transactional.
+ */
+"manual";
+
+/**  A session's current transaction state, as the UI shows it. */
+export type TxStatus = {
+	/**  Autocommit or manual. */
+	mode: TxMode,
+	/**  Settings explicit transactions are started with. */
+	config: TxConfig,
+	/**
+	 *  Whether an explicit transaction is currently open. Always false
+	 *  in autocommit.
+	 */
+	open: boolean,
+	/**
+	 *  Statements run since the transaction opened, so the indicator can
+	 *  say what would be lost to a rollback.
+	 */
+	pendingStatements: number,
+	/**
+	 *  How long the transaction has been open, in milliseconds. The
+	 *  number worth watching: a transaction open for minutes is holding
+	 *  back garbage collection for the whole database.
+	 */
+	ageMs: number,
+};
