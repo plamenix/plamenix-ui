@@ -1,48 +1,28 @@
 /**
- * Built-in dashboard sections (I5.10) — extracts the four legacy
- * Welcome cards (Connection info / Entity counts / Tips / Recent
- * queries) into `dashboard_sections` contributions registered under
- * `@plamenix-builtin/dashboard-default-sections`.
+ * Built-in dashboard sections (I5.10) — extracts the Tips and Recent
+ * queries Welcome cards into `dashboard_sections` contributions
+ * registered under `@plamenix-builtin/dashboard-default-sections`.
+ *
+ * Connection info and entity counts are deliberately not here: they
+ * live in `WelcomeDashboard`'s own hero and KPI pills, which read the
+ * live `DatabaseStats` feed rather than the section registry.
  *
  * Each card is a self-contained Component that reads from the shell-
  * supplied `DashboardContext` plus any stores it needs. The Components
- * re-use the helper primitives (`InfoCell`, `CountCell`, `TipsCard`,
- * `previewSql`, `formatRelative`, `stemOf`, `countsFromSchema`)
- * exported from `WelcomeDashboard.tsx` so the markup matches the
- * pre-I5.10 layout pixel-for-pixel.
+ * re-use the helper primitives (`TipsCard`, `previewSql`,
+ * `formatRelative`) exported from `WelcomeDashboard.tsx` so the markup
+ * matches the pre-I5.10 layout pixel-for-pixel.
  *
- * Priority spacing 200/210/220/230 preserves the legacy display
- * order (Connection → Entities → Tips → Recent). Registry default
- * is 100, so third-party dashboard cards (Active sessions / Lock
- * waits / Cache hit ratio / etc.) sort above the built-ins by
- * default — community-extends-shell convention.
+ * Priority spacing 220/230 preserves the legacy display order (Tips →
+ * Recent). Registry default is 100, so third-party dashboard cards
+ * (Active sessions / Lock waits / Cache hit ratio / etc.) sort above
+ * the built-ins by default — community-extends-shell convention.
  */
 
 import { useEffect, useState } from 'react';
-import {
-  Activity,
-  CheckCircle2,
-  Database,
-  Fingerprint,
-  History as HistoryIcon,
-  Lightbulb,
-  Network,
-  Sparkles,
-  Tag,
-  User as UserIcon,
-  XCircle,
-  Zap,
-} from 'lucide-react';
+import { CheckCircle2, History as HistoryIcon, Lightbulb, XCircle } from 'lucide-react';
 import { registerBuiltin, unregisterBuiltin } from '../../plugin-react/builtin.js';
-import {
-  CountCell,
-  InfoCell,
-  TipsCard,
-  countsFromSchema,
-  formatRelative,
-  previewSql,
-  stemOf,
-} from '../../db/WelcomeDashboard.js';
+import { TipsCard, formatRelative, previewSql } from '../../db/WelcomeDashboard.js';
 import { useDisplayStore } from '../../db/display-store.js';
 import { selectRecent, useRecentQueries } from '../../db/recent-queries.js';
 import { SqlHighlight } from '../../db/SqlHighlight.js';
@@ -52,90 +32,6 @@ import type {
 } from '../dashboard-section-contract.js';
 
 const BUILTIN_NAME = 'dashboard-default-sections';
-
-/** Connection-info section — six InfoCells in a responsive grid. */
-function BuiltinConnectionInfoCard({ ctx }: { ctx: DashboardContext }) {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const id = window.setInterval(() => setTick((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-  const connectedLabel =
-    ctx.connectedAt !== null && ctx.connectedAt !== undefined
-      ? formatRelative(ctx.connectedAt, tick)
-      : null;
-  const dbStem = stemOf(ctx.database ?? '');
-  return (
-    <section className="flex flex-col gap-4">
-      <header className="flex items-start gap-3">
-        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-accent">
-          <Sparkles className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[15px] font-semibold text-fg" title={dbStem}>
-            Welcome to {dbStem}
-          </h2>
-          <p className="mt-0.5 text-[12px] text-fg-subtle">
-            Run a query to populate this tab. Connection details below.
-          </p>
-        </div>
-      </header>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-        <InfoCell icon={UserIcon} label="User" value={ctx.user || '—'} />
-        <InfoCell
-          icon={Zap}
-          label="Engine"
-          value={ctx.engineVersion ? `Firebird ${ctx.engineVersion}` : 'Firebird (probing…)'}
-        />
-        <InfoCell icon={Network} label="Host" value={`${ctx.host ?? '—'}:${ctx.port ?? '—'}`} />
-        <InfoCell
-          icon={Database}
-          label="Database"
-          value={ctx.database ?? '—'}
-          mono
-          title={ctx.database}
-        />
-        <InfoCell
-          icon={Fingerprint}
-          label="Session"
-          value={ctx.sessionId ?? '—'}
-          mono
-          title={ctx.sessionId ?? undefined}
-        />
-        <InfoCell
-          icon={Activity}
-          label="Connected"
-          value={connectedLabel ?? '—'}
-          title={
-            ctx.connectedAt !== null && ctx.connectedAt !== undefined
-              ? new Date(ctx.connectedAt).toLocaleString()
-              : undefined
-          }
-        />
-      </div>
-    </section>
-  );
-}
-
-/** Entity-counts section — six CountCells (Tables / Views / Procs / Triggers / Generators / Domains). */
-function BuiltinEntityCountsCard({ ctx }: { ctx: DashboardContext }) {
-  const counts = countsFromSchema(ctx.schema ?? null);
-  return (
-    <section className="flex flex-col gap-2">
-      <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-        <Tag className="h-3 w-3" /> Entity counts
-      </h3>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-        <CountCell label="Tables" value={counts.tables} />
-        <CountCell label="Views" value={counts.views} />
-        <CountCell label="Procedures" value={counts.procedures} />
-        <CountCell label="Triggers" value={counts.triggers} />
-        <CountCell label="Generators" value={counts.generators} />
-        <CountCell label="Domains" value={counts.domains} />
-      </div>
-    </section>
-  );
-}
 
 /** Tips section — gated on the `useDisplayStore.showWelcomeTips` flag.
  *  Renders nothing when the user has hidden tips so it doesn't take a
@@ -219,9 +115,6 @@ const SECTIONS: {
   priority: number;
   payload: DashboardSectionContributionPayload;
 }[] = [
-  // Connection-info + entity-counts cards have moved into the
-  // top-level WelcomeDashboard hero + KPI tiles. Only Tips + Recent
-  // queries remain as registry sections.
   {
     id: 'tips',
     priority: 220,
@@ -235,8 +128,8 @@ const SECTIONS: {
 ];
 
 /**
- * Registers the four built-in Welcome cards. Returns a teardown
- * closure for `useEffect` pairing.
+ * Registers the built-in Welcome cards. Returns a teardown closure for
+ * `useEffect` pairing.
  */
 export function registerBuiltinDefaultDashboardSections(): () => void {
   registerBuiltin(BUILTIN_NAME, {
