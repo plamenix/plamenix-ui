@@ -59,6 +59,7 @@
     "react-dom": "^19"
   },
   "devDependencies": {
+    "@eslint/js": "^9",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^22",
     "@types/react": "^19",
@@ -71,6 +72,7 @@
     "jsdom": "^29.1.1",
     "prettier": "^3",
     "typescript": "^6",
+    "typescript-eslint": "^8",
     "vite": "^8",
     "vite-plugin-dts": "^4",
     "vitest": "^4"
