@@ -39,8 +39,17 @@ import {
   parseEditedValue,
 } from './inline-edit';
 import type { ColumnInfo, TableInfo } from './types';
+import { emitRowInserted } from '../events/data-events.js';
+import { rowInsertingChain } from '../interceptors/row-inserting.js';
 
 export interface RowEditorModalProps {
+  /** Tab that opened the modal. Threaded through `row.inserting`
+   *  interceptor + `row/inserted` event emit. */
+  tabId: string;
+  /** Session backing the INSERT. `null` is invalid in practice (the
+   *  open-modal action requires a live session); kept nullable for
+   *  uniformity with the other table-surface components. */
+  sessionId: string | null;
   /** Target table for the INSERT. Owns the column list and PK info. */
   table: TableInfo;
   /** Fires the host-supplied SQL executor with the composed INSERT
@@ -162,7 +171,13 @@ function FieldWidget({
   );
 }
 
-export function RowEditorModal({ table, onCommit, onCancel }: RowEditorModalProps) {
+export function RowEditorModal({
+  tabId,
+  sessionId,
+  table,
+  onCommit,
+  onCancel,
+}: RowEditorModalProps) {
   const editable = useMemo(
     () => table.columns.filter((c) => !c.sqlType.toUpperCase().startsWith('BLOB')),
     [table.columns],
@@ -205,8 +220,16 @@ export function RowEditorModal({ table, onCommit, onCancel }: RowEditorModalProp
 
   const submit = async () => {
     if (busy) return;
+    if (sessionId === null) {
+      setGlobalError('No active session — cannot insert.');
+      return;
+    }
     setGlobalError(null);
-    const collected: { name: string; literal: string }[] = [];
+    const collected: {
+      name: string;
+      literal: string;
+      value: import('./generated').ColumnValue | null;
+    }[] = [];
     const nextErrors: Record<string, string> = {};
     for (const column of editable) {
       const state = fields[column.name] ?? { draft: '', touched: false };
@@ -216,7 +239,11 @@ export function RowEditorModal({ table, onCommit, onCancel }: RowEditorModalProp
         nextErrors[column.name] = parsed.reason;
         continue;
       }
-      collected.push({ name: column.name, literal: parsed.literal });
+      collected.push({
+        name: column.name,
+        literal: parsed.literal,
+        value: parsed.value,
+      });
     }
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -226,10 +253,30 @@ export function RowEditorModal({ table, onCommit, onCancel }: RowEditorModalProp
       setGlobalError('Fill at least one column before inserting.');
       return;
     }
-    const sql = buildInsertSql({ table: table.name, values: collected });
+    const builtSql = buildInsertSql({ table: table.name, values: collected });
+    const decision = await rowInsertingChain.run({
+      tabId,
+      sessionId,
+      table: table.name,
+      values: collected.map((c) => ({ column: c.name, value: c.value ?? null })),
+      sql: builtSql,
+    });
+    if (decision.action === 'cancel') {
+      setGlobalError(decision.reason);
+      return;
+    }
+    const sql =
+      decision.action === 'replace' ? decision.ctx.sql : builtSql;
     setBusy(true);
     try {
       await onCommit(sql);
+      emitRowInserted({
+        tabId,
+        sessionId,
+        table: table.name,
+        sql,
+        insertedAt: Date.now(),
+      });
       onCancel();
     } catch (err) {
       setGlobalError(err instanceof Error ? err.message : String(err));

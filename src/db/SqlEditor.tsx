@@ -18,14 +18,31 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { sql } from '@codemirror/lang-sql';
 import { bracketMatching } from '@codemirror/language';
 import { autocompletion } from '@codemirror/autocomplete';
+import {
+  linter,
+  lintGutter,
+  type Diagnostic as CmDiagnostic,
+} from '@codemirror/lint';
 import { resolveThemeMode, useThemeStore } from '../theme/theme-store';
 import { sqlThemeFor } from './sql-theme';
 import { useEditorStore, type EditorFontSize } from './editor-store';
+import { firebirdDialect, firebirdSchemaFor } from './firebird-dialect';
+import { usePluginContributions } from '../plugin-react/usePluginContributions';
 import {
-  firebirdDialect,
-  firebirdGlobalCompletions,
-  firebirdSchemaFor,
-} from './firebird-dialect';
+  pluginContributionsToCompletionProviders,
+  runApplicableCompletionProviders,
+  type CompletionProviderContributionPayload,
+  type CompletionProviderDescriptor,
+} from '../completions/completion-provider-contract';
+import { registerBuiltinFirebirdKeywordsCompletion } from '../completions/builtins/firebird-keywords';
+import {
+  lineColToOffset,
+  pluginContributionsToDiagnosticProviders,
+  runDiagnosticProviders,
+  type DiagnosticProviderContributionPayload,
+  type DiagnosticProviderDescriptor,
+} from '../diagnostics/diagnostic-provider-contract';
+import { registerBuiltinBasicSyntaxDiagnostic } from '../diagnostics/builtins/basic-syntax';
 import type { Schema } from './types';
 
 /** Theme extension that sets the font size for the content + gutters
@@ -67,6 +84,16 @@ export interface SqlEditorProps {
    *  argument is the new authoritative map; do not merge with stale
    *  copies. */
   onBookmarksChange?: ((next: BookmarkMap) => void) | undefined;
+  /** Fires when the editor's DOM root gains focus. Threaded through
+   *  to the host so `editor/focused` events (I6.11) can emit with
+   *  the active tab id. */
+  onFocus?: (() => void) | undefined;
+  /** Fires when the editor's selection changes (caret move, marquee,
+   *  keyboard selection). Threaded through to the host so
+   *  `editor/selection-changed` events (I6.11) can emit. `anchor` is
+   *  the side the user clicked first; `head` is where the cursor
+   *  sits — equal when the selection is empty (cursor-only). */
+  onSelectionChange?: ((sel: { anchor: number; head: number }) => void) | undefined;
 }
 
 /** Builds the `sql({...})` extension for the current schema. Re-built
@@ -257,6 +284,8 @@ export function SqlEditor({
   schema = null,
   bookmarks,
   onBookmarksChange,
+  onFocus,
+  onSelectionChange,
 }: SqlEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -274,7 +303,36 @@ export function SqlEditor({
   busyRef.current = busy;
   const onBookmarksChangeRef = useRef(onBookmarksChange);
   onBookmarksChangeRef.current = onBookmarksChange;
+  const onFocusRef = useRef(onFocus);
+  onFocusRef.current = onFocus;
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
   const initialBookmarksRef = useRef(bookmarks ?? {});
+
+  // I5.12 — register the built-in Firebird-keywords completion
+  // provider through the shared registry. Same idempotent ref-bridge
+  // pattern as other built-in registrations.
+  useEffect(() => registerBuiltinFirebirdKeywordsCompletion(), []);
+
+  // Live snapshot of registered completion providers, captured into
+  // a ref so the CodeMirror autocompletion override (installed once
+  // at EditorState.create time) sees the latest descriptors on every
+  // keystroke without rebuilding the editor.
+  const completionContributions =
+    usePluginContributions<CompletionProviderContributionPayload>('completion_providers');
+  const completionDescriptorsRef = useRef<CompletionProviderDescriptor[]>([]);
+  completionDescriptorsRef.current =
+    pluginContributionsToCompletionProviders(completionContributions);
+
+  // I5.13 — register the built-in basic-syntax diagnostic provider.
+  // Same ref-bridge so the linter callback (installed once at editor
+  // creation) reads the latest descriptors per lint run.
+  useEffect(() => registerBuiltinBasicSyntaxDiagnostic(), []);
+  const diagnosticContributions =
+    usePluginContributions<DiagnosticProviderContributionPayload>('diagnostics_providers');
+  const diagnosticDescriptorsRef = useRef<DiagnosticProviderDescriptor[]>([]);
+  diagnosticDescriptorsRef.current =
+    pluginContributionsToDiagnosticProviders(diagnosticContributions);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -299,10 +357,55 @@ export function SqlEditor({
             (ctx) => {
               const word = ctx.matchBefore(/\w+/);
               if (!word || (word.from === word.to && !ctx.explicit)) return null;
-              return { from: word.from, options: firebirdGlobalCompletions };
+              // I5.12 — merge contributions from registered providers
+              // applicable to the `'sql'` scope. The descriptors-ref
+              // is updated on every React render so this callback
+              // sees the latest registered providers without
+              // rebuilding the editor.
+              const options = runApplicableCompletionProviders(
+                completionDescriptorsRef.current,
+                'sql',
+                {
+                  cm: ctx,
+                  word: { from: word.from, to: word.to, text: word.text },
+                  explicit: ctx.explicit,
+                },
+              );
+              if (options.length === 0) return null;
+              return { from: word.from, options };
             },
           ],
         }),
+        // I5.13 — `@codemirror/lint` linter calls back per buffer
+        // change with the current document text. The callback walks
+        // the registered diagnostic providers via the ref, flattens
+        // their output, maps each diagnostic's 1-based (line, col)
+        // to the 0-based document offset CodeMirror consumes, and
+        // returns the resulting `CmDiagnostic[]`. The gutter pip
+        // strip is rendered by `lintGutter()` to the left of line
+        // numbers.
+        linter((view) => {
+          const text = view.state.doc.toString();
+          const diagnostics = runDiagnosticProviders(
+            diagnosticDescriptorsRef.current,
+            text,
+          );
+          const out: CmDiagnostic[] = [];
+          for (const d of diagnostics) {
+            const from = lineColToOffset(text, d.line, d.col);
+            const to = lineColToOffset(text, d.line, d.endCol ?? d.col + 1);
+            const cm: CmDiagnostic = {
+              from,
+              to: Math.max(from, to),
+              severity: d.severity,
+              message: d.message,
+            };
+            if (d.code !== undefined) cm.source = d.code;
+            out.push(cm);
+          }
+          return out;
+        }),
+        lintGutter(),
         sqlCompartment.current.of(buildSqlExtension(schema)),
         dropHandlers,
         bookmarksField.init(() => initialBookmarksRef.current),
@@ -339,6 +442,18 @@ export function SqlEditor({
           if (prev && next && !bookmarksEqual(prev, next)) {
             onBookmarksChangeRef.current?.(next);
           }
+          if (update.selectionSet) {
+            const range = update.state.selection.main;
+            onSelectionChangeRef.current?.({
+              anchor: range.anchor,
+              head: range.head,
+            });
+          }
+        }),
+        EditorView.domEventHandlers({
+          focus: () => {
+            onFocusRef.current?.();
+          },
         }),
       ],
     });

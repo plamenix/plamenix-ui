@@ -31,10 +31,16 @@ export interface SchemaDdl {
   autoExecute?: boolean;
 }
 
-/** Kinds that carry a source text the read-only DDL viewer can surface.
- *  Tables, generators, and domains have no `*_SOURCE` column in
- *  Firebird's metadata and are excluded. */
-export type DdlSourceKind = 'view' | 'procedure' | 'trigger';
+/** Kinds the read-only DDL viewer can surface. Views / procedures /
+ *  triggers carry a `*_SOURCE` column the driver fetches; generators
+ *  and domains have no source text in Firebird's metadata so the host
+ *  synthesizes a minimal `CREATE …` DDL from cached schema instead. */
+export type DdlSourceKind =
+  | 'view'
+  | 'procedure'
+  | 'trigger'
+  | 'generator'
+  | 'domain';
 
 /** Builds the metadata SELECT that returns the source text for a
  *  `view`, `procedure`, or `trigger`. The driver decodes the BLOB
@@ -49,6 +55,12 @@ export function sourceQuery(kind: DdlSourceKind, name: string): string {
       return `SELECT RDB$PROCEDURE_SOURCE FROM RDB$PROCEDURES WHERE TRIM(RDB$PROCEDURE_NAME) = '${escaped}';`;
     case 'trigger':
       return `SELECT RDB$TRIGGER_SOURCE FROM RDB$TRIGGERS WHERE TRIM(RDB$TRIGGER_NAME) = '${escaped}';`;
+    case 'generator':
+    case 'domain':
+      // Generators + domains carry no source — the host synthesizes a
+      // minimal `CREATE …` DDL from the cached schema. This branch
+      // exists only so TypeScript's exhaustiveness check is happy.
+      return '';
   }
 }
 

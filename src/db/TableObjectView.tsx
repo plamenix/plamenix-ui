@@ -1,9 +1,14 @@
-import { useMemo, useState } from 'react';
-import { Database, FileCode, ListTree, RefreshCcw, X, type LucideIcon } from 'lucide-react';
-import { MultiResultView } from './MultiResultView';
-import { SqlHighlight } from './SqlHighlight';
+import { useEffect, useMemo, useState, type ComponentType } from 'react';
+import { Database, RefreshCcw, X } from 'lucide-react';
+import { usePluginContributions } from '../plugin-react/usePluginContributions';
+import {
+  pluginContributionsToInspectorTabs,
+  type ObjectInspectorContext,
+  type ObjectInspectorContributionPayload,
+  type ObjectInspectorHostHelpers,
+} from '../inspectors/object-inspector-contract';
+import { registerBuiltinTableInspectorTabs } from '../inspectors/builtins/table-inspector-tabs';
 import type {
-  ColumnInfo,
   ColumnValue,
   Schema,
   StatementOutcome,
@@ -46,8 +51,6 @@ export function buildCreateTableDdl(table: TableInfo): string {
   return `CREATE TABLE ${quoteIdent(table.name)} (\n${lines.join(',\n')}\n);`;
 }
 
-type TabKey = 'data' | 'schema' | 'ddl';
-
 export interface TableObjectViewProps {
   /** Table-or-view metadata for the focused relation. Drives the
    *  Schema column list and DDL synthesis. */
@@ -78,6 +81,10 @@ export interface TableObjectViewProps {
   }) => Promise<{ cells: ColumnValue[] }[]>;
   onStreamedExport?: StreamedExportRunner | undefined;
   sessionId: string | null;
+  /** Tab the view renders for. Threaded into the inspector context
+   *  so the built-in Data tab's `MultiResultView` carries the
+   *  originating tab id for event emit + interceptor context. */
+  tabId: string;
 }
 
 /**
@@ -102,8 +109,67 @@ export function TableObjectView({
   onFetchScopedRows,
   onStreamedExport,
   sessionId,
+  tabId,
 }: TableObjectViewProps) {
-  const [tab, setTab] = useState<TabKey>('data');
+  // I5.4 — register the built-in Data / Schema / DDL tabs once per
+  // TableObjectView mount. Single mount per session in both shells
+  // today; double-mount would throw at the registry, but the host
+  // never renders two TableObjectViews simultaneously.
+  useEffect(() => registerBuiltinTableInspectorTabs(), []);
+
+  const inspectorContributions =
+    usePluginContributions<ObjectInspectorContributionPayload>('object_inspectors');
+  const descriptors = useMemo(
+    () => pluginContributionsToInspectorTabs(inspectorContributions, 'table'),
+    [inspectorContributions],
+  );
+
+  // Track the active tab by descriptor id. When the registered tab
+  // set changes (plugin install/uninstall) and the previously active
+  // tab disappears, fall back to the first one.
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const resolvedActiveId =
+    activeTabId && descriptors.some((d) => d.id === activeTabId)
+      ? activeTabId
+      : descriptors[0]?.id ?? null;
+  const activeDescriptor = descriptors.find((d) => d.id === resolvedActiveId) ?? null;
+
+  // Compose the host helpers handed to every inspector contribution.
+  // Built-in tabs (Data) consume every field; pure tabs (Schema, DDL)
+  // ignore them. Plugin authors read what they need.
+  const ctx: ObjectInspectorContext<TableInfo> = useMemo(() => {
+    const host: ObjectInspectorHostHelpers = {
+      results,
+      schema,
+      sessionId,
+      tabId,
+      columnWidths,
+      onRefreshData,
+      onCommitCellEdit,
+      onApplyFilter,
+      onFetchBlob,
+      onCountAllRows,
+      onFetchScopedRows,
+      onColumnWidthsChange,
+    };
+    if (onStreamedExport !== undefined) host.onStreamedExport = onStreamedExport;
+    return { kind: 'table', target: table, host };
+  }, [
+    table,
+    results,
+    schema,
+    sessionId,
+    tabId,
+    columnWidths,
+    onRefreshData,
+    onCommitCellEdit,
+    onApplyFilter,
+    onFetchBlob,
+    onCountAllRows,
+    onFetchScopedRows,
+    onColumnWidthsChange,
+    onStreamedExport,
+  ]);
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -116,9 +182,16 @@ export function TableObjectView({
           </span>
         </div>
         <div className="flex flex-1 items-center gap-0.5">
-          <TabButton id="data" current={tab} onPick={setTab} icon={Database} label="Data" />
-          <TabButton id="schema" current={tab} onPick={setTab} icon={ListTree} label="Schema" />
-          <TabButton id="ddl" current={tab} onPick={setTab} icon={FileCode} label="DDL" />
+          {descriptors.map((d) => (
+            <InspectorTabButton
+              key={d.id}
+              id={d.id}
+              currentId={resolvedActiveId}
+              onPick={setActiveTabId}
+              icon={d.icon}
+              label={d.label}
+            />
+          ))}
         </div>
         <button
           type="button"
@@ -141,47 +214,30 @@ export function TableObjectView({
       </header>
 
       <div className="flex-1 overflow-hidden">
-        {tab === 'data' &&
-          (results && results.length > 0 ? (
-            <div className="h-full overflow-auto p-4">
-              <MultiResultView
-                outcomes={results}
-                schema={schema}
-                onCommitCellEdit={onCommitCellEdit}
-                onApplyFilter={onApplyFilter}
-                columnWidths={columnWidths}
-                onColumnWidthsChange={onColumnWidthsChange}
-                onFetchBlob={onFetchBlob}
-                onCountAllRows={onCountAllRows}
-                onFetchScopedRows={onFetchScopedRows}
-                {...(onStreamedExport ? { onStreamedExport } : {})}
-                {...(sessionId !== null ? { sessionId } : {})}
-              />
-            </div>
-          ) : (
-            <EmptyTabState label="Loading rows…" />
-          ))}
-        {tab === 'schema' && <SchemaTab columns={table.columns} primaryKey={table.primaryKey ?? []} />}
-        {tab === 'ddl' && <DdlTab table={table} />}
+        {activeDescriptor ? (
+          <activeDescriptor.Component ctx={ctx} />
+        ) : (
+          <EmptyTabState label="No inspector tabs registered." />
+        )}
       </div>
     </div>
   );
 }
 
-function TabButton({
+function InspectorTabButton({
   id,
-  current,
+  currentId,
   onPick,
   icon: Icon,
   label,
 }: {
-  id: TabKey;
-  current: TabKey;
-  onPick: (next: TabKey) => void;
-  icon: LucideIcon;
+  id: string;
+  currentId: string | null;
+  onPick: (next: string) => void;
+  icon: ComponentType<{ className?: string }> | undefined;
   label: string;
 }) {
-  const active = current === id;
+  const active = currentId === id;
   return (
     <button
       type="button"
@@ -193,75 +249,9 @@ function TabButton({
           : 'text-fg-muted hover:bg-elevated hover:text-fg'
       }`}
     >
-      <Icon className="h-3.5 w-3.5" />
+      {Icon && <Icon className="h-3.5 w-3.5" />}
       {label}
     </button>
-  );
-}
-
-function SchemaTab({
-  columns,
-  primaryKey,
-}: {
-  columns: ColumnInfo[];
-  primaryKey: string[];
-}) {
-  const pkSet = useMemo(() => new Set(primaryKey), [primaryKey]);
-  return (
-    <div className="h-full overflow-auto p-4">
-      <div className="overflow-hidden rounded-lg border border-edge">
-        <table className="w-full border-collapse text-left text-xs">
-          <thead className="bg-inset text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
-            <tr>
-              <th className="px-3 py-2">#</th>
-              <th className="px-3 py-2">Column</th>
-              <th className="px-3 py-2">Type</th>
-              <th className="px-3 py-2">Nullable</th>
-              <th className="px-3 py-2">Default</th>
-              <th className="px-3 py-2">PK</th>
-            </tr>
-          </thead>
-          <tbody>
-            {columns.map((c) => (
-              <tr key={c.name} className="border-t border-edge text-fg">
-                <td className="px-3 py-1.5 text-fg-subtle">{c.position}</td>
-                <td className="px-3 py-1.5 font-mono">{c.name}</td>
-                <td className="px-3 py-1.5 font-mono text-fg-muted">{c.sqlType}</td>
-                <td className="px-3 py-1.5 text-fg-muted">{c.nullable ? 'YES' : 'NO'}</td>
-                <td className="px-3 py-1.5 font-mono text-fg-muted">
-                  {c.defaultExpr ?? <span className="text-fg-subtle">—</span>}
-                </td>
-                <td className="px-3 py-1.5">
-                  {pkSet.has(c.name) && (
-                    <span className="rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
-                      PK
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {columns.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-3 py-4 text-center italic text-fg-subtle">
-                  No columns reported.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function DdlTab({ table }: { table: TableInfo }) {
-  const ddl = useMemo(() => buildCreateTableDdl(table), [table]);
-  return (
-    <div className="h-full overflow-auto p-4">
-      <div className="overflow-hidden rounded-lg border border-edge bg-inset">
-        <SqlHighlight value={ddl} className="p-4 text-xs leading-relaxed" />
-      </div>
-    </div>
   );
 }
 

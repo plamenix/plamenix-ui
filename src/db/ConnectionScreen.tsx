@@ -29,6 +29,13 @@ import { ErrorBanner } from './ErrorBanner';
 import { ACCENT_COLORS, type AccentId } from '../theme/accent-colors';
 import { useResolvedThemeMode } from '../theme/theme-store';
 import { applySettings, parseSettings } from '../settings-io';
+import { usePluginContributions } from '../plugin-react/usePluginContributions';
+import {
+  pluginContributionsToAuthProviders,
+  type AuthProviderContributionPayload,
+  type AuthProviderFormContext,
+} from '../auth/auth-provider-contract';
+import { registerBuiltinPasswordAuthProvider } from '../auth/builtins/password-provider';
 import type {
   ConnectionForm,
   ListAliasesResult,
@@ -81,6 +88,10 @@ export interface ConnectionScreenProps {
    *  they cancel. Web edition omits this and only ships the text
    *  input. */
   onBrowseFbclient?: () => Promise<string | null>;
+  /** Opens a native file picker filtered to `.fdb` and returns the
+   *  selected path, or `null` when the user cancels. Surfaces in
+   *  embedded mode as a Browse button next to the database field. */
+  onBrowseDatabase?: () => Promise<string | null>;
   /** Fetches the Firebird client library for the host platform and
    *  the supplied version label (e.g. `"5.0.3"`). Resolves with the
    *  installed path. `version === undefined` means "latest known
@@ -193,13 +204,46 @@ export function ConnectionScreen({
   onTest,
   onListAliases,
   onBrowseFbclient,
+  onBrowseDatabase,
   onDownloadFbclient,
   fbclientReleases = null,
   onBrowseFbclientDir,
 }: ConnectionScreenProps) {
   const [search, setSearch] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [profileModeTab, setProfileModeTab] = useState<'server' | 'embedded'>(
+    'server',
+  );
+  // Keep the profile filter tab in sync with the form's mode so the
+  // list shows relevant profiles when the user toggles the mode tabs
+  // at the top of the form.
+  useEffect(() => {
+    setProfileModeTab(form.embedded ? 'embedded' : 'server');
+  }, [form.embedded]);
   const [showEncKey, setShowEncKey] = useState(false);
+
+  // I5.7 — register the built-in password auth provider through the
+  // shared registry. Single mount per ConnectionScreen render cycle;
+  // teardown on unmount.
+  useEffect(() => registerBuiltinPasswordAuthProvider(), []);
+
+  const authProviderContributions =
+    usePluginContributions<AuthProviderContributionPayload>('auth_providers');
+  const authProviders = useMemo(
+    () => pluginContributionsToAuthProviders(authProviderContributions),
+    [authProviderContributions],
+  );
+  const [activeAuthProviderId, setActiveAuthProviderId] = useState<string | null>(null);
+  const resolvedAuthProviderId =
+    activeAuthProviderId && authProviders.some((p) => p.id === activeAuthProviderId)
+      ? activeAuthProviderId
+      : authProviders[0]?.id ?? null;
+  const activeAuthProvider =
+    authProviders.find((p) => p.id === resolvedAuthProviderId) ?? null;
+  const authFormCtx = useMemo<AuthProviderFormContext>(() => {
+    const ctx: AuthProviderFormContext = { form, onChange, busy };
+    if (passwordHint !== undefined) ctx.passwordHint = passwordHint;
+    return ctx;
+  }, [form, onChange, busy, passwordHint]);
   const [aliasOpen, setAliasOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // Surfaces a small "N changed" hint on the Advanced button so the
@@ -275,10 +319,22 @@ export function ConnectionScreen({
     if (aliasesData === null && !aliasesLoading) onListAliases();
   };
 
+  const profileCounts = useMemo(() => {
+    let server = 0;
+    let embedded = 0;
+    for (const p of profiles) {
+      if (p.embedded) embedded += 1;
+      else server += 1;
+    }
+    return { server, embedded };
+  }, [profiles]);
   const filtered = useMemo(() => {
+    const inMode = profiles.filter((p) =>
+      profileModeTab === 'embedded' ? p.embedded === true : !p.embedded,
+    );
     const base = !search
-      ? profiles
-      : profiles.filter((p) => {
+      ? inMode
+      : inMode.filter((p) => {
           const q = search.toLowerCase();
           return (
             p.name.toLowerCase().includes(q) ||
@@ -297,7 +353,7 @@ export function ConnectionScreen({
       const tb = mostRecentTouch(b) ?? b.createdAt ?? 0;
       return tb - ta;
     });
-  }, [profiles, search]);
+  }, [profiles, search, profileModeTab]);
 
   const isCurrentSaved = profiles.some(
     (p) =>
@@ -334,6 +390,44 @@ export function ConnectionScreen({
                     onChange={(e) => setSearch(e.target.value)}
                     className="w-full rounded-lg border border-edge bg-inset py-1.5 pl-8 pr-3 text-xs text-fg placeholder:text-fg-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                   />
+                </div>
+                <div
+                  role="tablist"
+                  aria-label="Profile mode filter"
+                  className="mt-2 flex gap-1 rounded-lg border border-edge bg-inset p-0.5"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={profileModeTab === 'server'}
+                    onClick={() => setProfileModeTab('server')}
+                    className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                      profileModeTab === 'server'
+                        ? 'bg-accent text-canvas shadow-sm'
+                        : 'text-fg-subtle hover:bg-elevated hover:text-fg'
+                    }`}
+                  >
+                    Server
+                    <span className="ml-1 font-mono text-[9px] opacity-70">
+                      {profileCounts.server}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={profileModeTab === 'embedded'}
+                    onClick={() => setProfileModeTab('embedded')}
+                    className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                      profileModeTab === 'embedded'
+                        ? 'bg-accent text-canvas shadow-sm'
+                        : 'text-fg-subtle hover:bg-elevated hover:text-fg'
+                    }`}
+                  >
+                    Embedded
+                    <span className="ml-1 font-mono text-[9px] opacity-70">
+                      {profileCounts.embedded}
+                    </span>
+                  </button>
                 </div>
               </div>
             )}
@@ -486,6 +580,43 @@ export function ConnectionScreen({
               </div>
             )}
 
+            <div
+              role="tablist"
+              aria-label="Connection mode"
+              className="mb-4 flex gap-1 rounded-lg border border-edge bg-canvas p-1"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!form.embedded}
+                onClick={() => onChange('embedded', false)}
+                className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  !form.embedded
+                    ? 'bg-accent text-canvas shadow-sm'
+                    : 'text-fg-subtle hover:bg-elevated hover:text-fg'
+                }`}
+              >
+                Server mode
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={form.embedded}
+                onClick={() => {
+                  onChange('embedded', true);
+                  onChange('pureRust', false);
+                }}
+                className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  form.embedded
+                    ? 'bg-accent text-canvas shadow-sm'
+                    : 'text-fg-subtle hover:bg-elevated hover:text-fg'
+                }`}
+                title="Attach via Firebird's embedded engine — exclusive local file access, no host/port/password needed"
+              >
+                Embedded mode
+              </button>
+            </div>
+
             <div className="space-y-3.5">
               <div>
                 <label className={LABEL_CLASS}>
@@ -505,26 +636,30 @@ export function ConnectionScreen({
               </div>
 
               <div className="flex gap-3">
-                <div className="w-[240px] shrink-0">
-                  <label className={LABEL_CLASS}>Host</label>
-                  <input
-                    type="text"
-                    value={form.host}
-                    onChange={(e) => onChange('host', e.target.value)}
-                    className={INPUT_CLASS}
-                    required
-                  />
-                </div>
-                <div className="w-[88px] shrink-0">
-                  <label className={LABEL_CLASS}>Port</label>
-                  <input
-                    type="number"
-                    value={form.port}
-                    onChange={(e) => onChange('port', Number(e.target.value))}
-                    className={INPUT_CLASS}
-                    required
-                  />
-                </div>
+                {!form.embedded && (
+                  <>
+                    <div className="w-[240px] shrink-0">
+                      <label className={LABEL_CLASS}>Host</label>
+                      <input
+                        type="text"
+                        value={form.host}
+                        onChange={(e) => onChange('host', e.target.value)}
+                        className={INPUT_CLASS}
+                        required
+                      />
+                    </div>
+                    <div className="w-[88px] shrink-0">
+                      <label className={LABEL_CLASS}>Port</label>
+                      <input
+                        type="number"
+                        value={form.port}
+                        onChange={(e) => onChange('port', Number(e.target.value))}
+                        className={INPUT_CLASS}
+                        required
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="min-w-0 flex-1">
                   <label className={LABEL_CLASS}>
                     Charset{' '}
@@ -551,47 +686,59 @@ export function ConnectionScreen({
                 </div>
               </div>
 
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className={LABEL_CLASS}>Username</label>
-                  <input
-                    type="text"
-                    value={form.user}
-                    onChange={(e) => onChange('user', e.target.value)}
-                    className={INPUT_CLASS}
-                    required
-                  />
+              {/* I5.7 — auth provider tabs (only render when >1
+                  provider registered) + the active provider's
+                  FormComponent in place of the legacy inline
+                  Username/Password block. The built-in password
+                  provider renders the same pre-I5.7 markup with the
+                  show/hide toggle, so the single-provider case is
+                  visually identical to the pre-section layout. */}
+              {authProviders.length > 1 && (
+                <div
+                  role="tablist"
+                  aria-label="Authentication method"
+                  className="flex items-center gap-1 border-b border-edge"
+                >
+                  {authProviders.map((p) => {
+                    const active = p.id === resolvedAuthProviderId;
+                    const Icon = p.icon;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setActiveAuthProviderId(p.id)}
+                        className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-xs font-medium transition-colors ${
+                          active
+                            ? 'border-accent text-accent'
+                            : 'border-transparent text-fg-muted hover:text-fg'
+                        }`}
+                      >
+                        {Icon && <Icon className="h-3.5 w-3.5" />}
+                        {p.label}
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="flex-1">
-                  <label className={LABEL_CLASS}>Password</label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={form.password}
-                      onChange={(e) => onChange('password', e.target.value)}
-                      className={`${INPUT_CLASS} pr-9`}
-                    />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-subtle transition-colors hover:text-fg-muted"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-3.5 w-3.5" />
-                      ) : (
-                        <Eye className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
-                  {passwordHint && (
-                    <p className="mt-1 text-[10px] text-fg-subtle">{passwordHint}</p>
-                  )}
+              )}
+              {activeAuthProvider && (
+                <activeAuthProvider.FormComponent ctx={authFormCtx} />
+              )}
+              {form.embedded && (
+                <div className="rounded-md border border-edge bg-canvas px-3 py-2.5 text-[11px] text-fg-muted">
+                  <span className="font-semibold text-fg">Embedded mode:</span>{' '}
+                  attaches via Firebird's in-process engine using the{' '}
+                  <span className="font-mono">.fdb</span> file directly.
+                  Username is honored (recorded in{' '}
+                  <span className="font-mono">MON$ATTACHMENTS</span>);
+                  whether the password is enforced depends on the
+                  engine's <span className="font-mono">AuthServer</span>{' '}
+                  config in <span className="font-mono">firebird.conf</span>.
                 </div>
-              </div>
+              )}
 
-              {onTest && (
+              {!form.embedded && onTest && (
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
@@ -630,9 +777,9 @@ export function ConnectionScreen({
               <div className="relative">
                 <div className="mb-1 flex items-center justify-between">
                   <label className="block text-[11px] font-medium uppercase tracking-wide text-fg-muted">
-                    Database Path or Alias
+                    {form.embedded ? 'Database File' : 'Database Path or Alias'}
                   </label>
-                  {onListAliases && (
+                  {!form.embedded && onListAliases && (
                     <button
                       ref={aliasBtnRef}
                       type="button"
@@ -645,13 +792,37 @@ export function ConnectionScreen({
                     </button>
                   )}
                 </div>
-                <input
-                  type="text"
-                  value={form.database}
-                  onChange={(e) => onChange('database', e.target.value)}
-                  placeholder="/path/to/database.fdb or alias"
-                  className={INPUT_CLASS}
-                />
+                {form.embedded && onBrowseDatabase ? (
+                  <div className="flex">
+                    <input
+                      type="text"
+                      value={form.database}
+                      onChange={(e) => onChange('database', e.target.value)}
+                      placeholder="/Users/you/databases/my.fdb"
+                      className={`${INPUT_CLASS} rounded-r-none border-r-0 font-mono text-[12px]`}
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const picked = await onBrowseDatabase();
+                        if (picked) onChange('database', picked);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-r-md border border-edge bg-elevated px-3 text-xs font-medium text-fg-muted transition-colors hover:bg-panel hover:text-fg"
+                      title="Pick a .fdb file from disk"
+                    >
+                      <FolderOpen className="h-3.5 w-3.5" />
+                      Browse
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={form.database}
+                    onChange={(e) => onChange('database', e.target.value)}
+                    placeholder="/path/to/database.fdb or alias"
+                    className={INPUT_CLASS}
+                  />
+                )}
                 {aliasOpen && (
                   <div
                     ref={aliasPopRef}
@@ -881,7 +1052,13 @@ export function ConnectionScreen({
                   type="checkbox"
                   checked={form.pureRust}
                   onChange={(e) => onChange('pureRust', e.target.checked)}
-                  className="accent-[var(--color-accent)]"
+                  disabled={form.embedded}
+                  className="accent-[var(--color-accent)] disabled:opacity-50"
+                  title={
+                    form.embedded
+                      ? 'Embedded mode is native-only; pure-Rust cannot use the embedded engine.'
+                      : undefined
+                  }
                 />
                 Pure-Rust mode
               </label>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import {
   ArrowLeft,
   CalendarClock,
@@ -32,6 +32,18 @@ import {
 } from 'lucide-react';
 import { ACCENT_COLORS, type AccentId } from './accent-colors';
 import { useResolvedThemeMode, useThemeStore } from './theme-store';
+import { usePluginContributions } from '../plugin-react/usePluginContributions';
+import {
+  applyThemeCssVariables,
+  pluginContributionsToThemes,
+  type ThemeContributionPayload,
+} from './theme-contract';
+import { registerBuiltinDefaultThemes } from './builtins/default-themes';
+import {
+  pluginContributionsToSettingsPanels,
+  type SettingsPanelContributionPayload,
+} from '../settings-panels/settings-panel-contract';
+import { registerBuiltinDefaultSettingsSections } from '../settings-panels/builtins/default-sections';
 import {
   useEditorStore,
   type EditorFontSize,
@@ -72,6 +84,39 @@ export function SettingsPanel({ open, onClose, onOpenDetailed }: SettingsPanelPr
   const accent = useThemeStore((s) => s.accent);
   const setMode = useThemeStore((s) => s.setMode);
   const setAccent = useThemeStore((s) => s.setAccent);
+  const activeThemeId = useThemeStore((s) => s.activeThemeId);
+  const setActiveThemeId = useThemeStore((s) => s.setActiveThemeId);
+
+  // I5.8 — register the three built-in themes on first SettingsPanel
+  // mount. Single-mount discipline (only one SettingsPanel per shell).
+  useEffect(() => registerBuiltinDefaultThemes(), []);
+  const themeContributions =
+    usePluginContributions<ThemeContributionPayload>('themes');
+  const themes = pluginContributionsToThemes(themeContributions);
+  const activeTheme =
+    (activeThemeId && themes.find((t) => t.id === activeThemeId)) || null;
+
+  // Apply the active theme's CSS variables whenever it changes (or
+  // when the user clears the override). Also coerce mode + accent on
+  // theme switch — picking a theme with `mode: 'dark'` snaps the user
+  // mode to dark; picking a theme with `accent: 'orange'` nudges the
+  // accent unless the theme registered `mode: 'auto'` / no accent.
+  useEffect(() => {
+    if (activeTheme) {
+      applyThemeCssVariables(activeTheme.cssVariables);
+      if (activeTheme.mode === 'light' && mode !== 'light') setMode('light');
+      else if (activeTheme.mode === 'dark' && mode !== 'dark') setMode('dark');
+      if (activeTheme.accent) {
+        // Coerce accent only when the registered id matches a known
+        // accent — defensive against typos in third-party themes.
+        const accentId = activeTheme.accent as AccentId;
+        if (ACCENT_COLORS.some((a) => a.id === accentId)) setAccent(accentId);
+      }
+    } else {
+      applyThemeCssVariables({});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTheme?.id, activeTheme?.cssVariables]);
 
   useEffect(() => {
     if (!open) return;
@@ -131,7 +176,7 @@ export function SettingsPanel({ open, onClose, onOpenDetailed }: SettingsPanelPr
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
         <section>
           <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-fg-subtle">
-            Theme
+            Mode
           </p>
           <div className="grid grid-cols-3 gap-2 rounded-lg border border-edge bg-inset p-1">
             <ModeButton
@@ -153,6 +198,35 @@ export function SettingsPanel({ open, onClose, onOpenDetailed }: SettingsPanelPr
               onClick={() => setMode('dark')}
             />
           </div>
+        </section>
+
+        {/* I5.8 — Theme picker dropdown. Reads `themes` contributions
+            from the registry; first option is `Default (no override)`
+            which clears any active theme and falls back to the Mode
+            buttons above. Built-in Light / Dark / Lavafire ship as
+            contributions; third-party themes (Dracula / GitHub /
+            Solarized / Nord / etc.) plug in here. */}
+        <section>
+          <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-fg-subtle">
+            Theme
+          </p>
+          <select
+            value={activeThemeId ?? ''}
+            onChange={(e) => setActiveThemeId(e.target.value === '' ? null : e.target.value)}
+            className="w-full rounded-lg border border-edge bg-inset px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          >
+            <option value="">Default (no override)</option>
+            {themes.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          {activeTheme && (
+            <p className="mt-1 text-[10px] text-fg-subtle">
+              Theme applied by {activeTheme.pluginId.replace('@plamenix-builtin/', '')}.
+            </p>
+          )}
         </section>
 
         <section>
@@ -186,7 +260,7 @@ export function SettingsPanel({ open, onClose, onOpenDetailed }: SettingsPanelPr
   );
 }
 
-function CsvDelimiterRow({
+export function CsvDelimiterRow({
   value,
   onChange,
 }: {
@@ -229,7 +303,7 @@ function CsvDelimiterRow({
   );
 }
 
-function DefaultExportRow({
+export function DefaultExportRow({
   value,
   onChange,
 }: {
@@ -277,7 +351,7 @@ function DefaultExportRow({
   );
 }
 
-function ExportIncludeDdlRow({
+export function ExportIncludeDdlRow({
   value,
   onChange,
 }: {
@@ -301,7 +375,7 @@ function ExportIncludeDdlRow({
   );
 }
 
-function QueryHistoryLimitRow({
+export function QueryHistoryLimitRow({
   value,
   onChange,
 }: {
@@ -349,7 +423,7 @@ function QueryHistoryLimitRow({
   );
 }
 
-function PageSizeRow({
+export function PageSizeRow({
   value,
   onChange,
 }: {
@@ -390,7 +464,7 @@ function PageSizeRow({
   );
 }
 
-function DateFormatRow({
+export function DateFormatRow({
   value,
   onChange,
 }: {
@@ -435,7 +509,7 @@ function DateFormatRow({
   );
 }
 
-function NullDisplayRow({
+export function NullDisplayRow({
   value,
   onChange,
 }: {
@@ -491,7 +565,7 @@ function NullDisplayRow({
   );
 }
 
-function SegmentRow<T extends string | number>({
+export function SegmentRow<T extends string | number>({
   icon: Icon,
   label,
   value,
@@ -536,7 +610,7 @@ function SegmentRow<T extends string | number>({
   );
 }
 
-function ModeButton({
+export function ModeButton({
   label,
   icon: Icon,
   active,
@@ -564,7 +638,7 @@ function ModeButton({
   );
 }
 
-function AccentGrid({
+export function AccentGrid({
   current,
   onPick,
   mode,
@@ -604,7 +678,7 @@ function AccentGrid({
   );
 }
 
-function ToggleRow({
+export function ToggleRow({
   icon: Icon,
   label,
   checked,
@@ -714,199 +788,15 @@ export interface SettingsPageProps {
  * controls; this page is where the full set lives.
  */
 export function SettingsPage({ onClose, backLabel = 'Back' }: SettingsPageProps) {
-  const mode = useThemeStore((s) => s.mode);
-  const resolvedMode = useResolvedThemeMode();
-  const accent = useThemeStore((s) => s.accent);
-  const sidebarCollapsed = useThemeStore((s) => s.sidebarCollapsed);
-  const setMode = useThemeStore((s) => s.setMode);
-  const setAccent = useThemeStore((s) => s.setAccent);
-  const setSidebarCollapsed = useThemeStore((s) => s.setSidebarCollapsed);
-  const fontSize = useEditorStore((s) => s.fontSize);
-  const editorLineNumbers = useEditorStore((s) => s.lineNumbers);
-  const lineWrap = useEditorStore((s) => s.lineWrap);
-  const tabSize = useEditorStore((s) => s.tabSize);
-  const submitOnModEnter = useEditorStore((s) => s.submitOnModEnter);
-  const setFontSize = useEditorStore((s) => s.setFontSize);
-  const setLineNumbers = useEditorStore((s) => s.setLineNumbers);
-  const setLineWrap = useEditorStore((s) => s.setLineWrap);
-  const setTabSize = useEditorStore((s) => s.setTabSize);
-  const setSubmitOnModEnter = useEditorStore((s) => s.setSubmitOnModEnter);
-  const nullDisplay = useDisplayStore((s) => s.nullDisplay);
-  const setNullDisplay = useDisplayStore((s) => s.setNullDisplay);
-  const dateFormat = useDisplayStore((s) => s.dateFormat);
-  const setDateFormat = useDisplayStore((s) => s.setDateFormat);
-  const defaultPageSize = useDisplayStore((s) => s.defaultPageSize);
-  const setDefaultPageSize = useDisplayStore((s) => s.setDefaultPageSize);
-  const csvDelimiter = useDisplayStore((s) => s.csvDelimiter);
-  const setCsvDelimiter = useDisplayStore((s) => s.setCsvDelimiter);
-  const defaultExportFormat = useDisplayStore((s) => s.defaultExportFormat);
-  const setDefaultExportFormat = useDisplayStore((s) => s.setDefaultExportFormat);
-  const exportIncludeDdl = useDisplayStore((s) => s.exportIncludeDdl);
-  const setExportIncludeDdl = useDisplayStore((s) => s.setExportIncludeDdl);
-  const showWelcomeTips = useDisplayStore((s) => s.showWelcomeTips);
-  const setShowWelcomeTips = useDisplayStore((s) => s.setShowWelcomeTips);
-  const autoReconnect = useConnectionPrefs((s) => s.autoReconnect);
-  const setAutoReconnect = useConnectionPrefs((s) => s.setAutoReconnect);
-  const queryHistoryLimit = useConnectionPrefs((s) => s.queryHistoryLimit);
-  const setQueryHistoryLimit = useConnectionPrefs((s) => s.setQueryHistoryLimit);
-
-  const sections: Array<{
-    id: string;
-    title: string;
-    description: string;
-    icon: LucideIcon;
-    body: ReactNode;
-  }> = [
-    {
-      id: 'theme',
-      title: 'Theme',
-      description: 'Pick the colour mode. System tracks your OS preference.',
-      icon: Palette,
-      body: (
-        <div className="grid grid-cols-3 gap-2 rounded-lg border border-edge bg-inset p-1">
-          <ModeButton
-            label="System"
-            icon={Monitor}
-            active={mode === 'system'}
-            onClick={() => setMode('system')}
-          />
-          <ModeButton
-            label="Light"
-            icon={Sun}
-            active={mode === 'light'}
-            onClick={() => setMode('light')}
-          />
-          <ModeButton
-            label="Dark"
-            icon={Moon}
-            active={mode === 'dark'}
-            onClick={() => setMode('dark')}
-          />
-        </div>
-      ),
-    },
-    {
-      id: 'accent',
-      title: 'Accent',
-      description: 'Highlight colour used by buttons, focus rings and the tab strip.',
-      icon: Droplet,
-      body: <AccentGrid current={accent} onPick={setAccent} mode={resolvedMode} />,
-    },
-    {
-      id: 'layout',
-      title: 'Layout',
-      description: 'Workspace chrome.',
-      icon: PanelLeftClose,
-      body: (
-        <ToggleRow
-          icon={PanelLeftClose}
-          label="Collapse schema sidebar"
-          checked={sidebarCollapsed}
-          onChange={setSidebarCollapsed}
-        />
-      ),
-    },
-    {
-      id: 'connection',
-      title: 'Connection',
-      description: 'How connection sessions behave.',
-      icon: PlugZap,
-      body: (
-        <ToggleRow
-          icon={PlugZap}
-          label="Auto-reconnect on disconnect"
-          checked={autoReconnect}
-          onChange={setAutoReconnect}
-        />
-      ),
-    },
-    {
-      id: 'history',
-      title: 'History',
-      description: 'Query history retention per profile.',
-      icon: History,
-      body: <QueryHistoryLimitRow value={queryHistoryLimit} onChange={setQueryHistoryLimit} />,
-    },
-    {
-      id: 'editor',
-      title: 'Editor',
-      description: 'SQL editor typography, indent + keymap.',
-      icon: Code2,
-      body: (
-        <div className="flex flex-col gap-2">
-          <SegmentRow<EditorFontSize>
-            icon={TextCursorInput}
-            label="Font size"
-            value={fontSize}
-            options={[12, 13, 14, 15, 16]}
-            onChange={setFontSize}
-            formatOption={(v) => `${v}`}
-          />
-          <SegmentRow<EditorTabSize>
-            icon={Indent}
-            label="Tab size"
-            value={tabSize}
-            options={[2, 4]}
-            onChange={setTabSize}
-            formatOption={(v) => `${v}`}
-          />
-          <ToggleRow
-            icon={ListOrdered}
-            label="Line numbers"
-            checked={editorLineNumbers}
-            onChange={setLineNumbers}
-          />
-          <ToggleRow
-            icon={WrapText}
-            label="Word wrap"
-            checked={lineWrap}
-            onChange={setLineWrap}
-          />
-          <ToggleRow
-            icon={CornerDownLeft}
-            label="⌘/Ctrl+Enter runs query"
-            checked={submitOnModEnter}
-            onChange={setSubmitOnModEnter}
-          />
-        </div>
-      ),
-    },
-    {
-      id: 'results',
-      title: 'Results',
-      description: 'How rows are rendered in the result table + welcome dashboard.',
-      icon: Table2,
-      body: (
-        <div className="flex flex-col gap-2">
-          <NullDisplayRow value={nullDisplay} onChange={setNullDisplay} />
-          <DateFormatRow value={dateFormat} onChange={setDateFormat} />
-          <PageSizeRow value={defaultPageSize} onChange={setDefaultPageSize} />
-          <ToggleRow
-            icon={Lightbulb}
-            label="Show Firebird tips on Welcome"
-            checked={showWelcomeTips}
-            onChange={setShowWelcomeTips}
-          />
-        </div>
-      ),
-    },
-    {
-      id: 'exports',
-      title: 'Exports',
-      description: 'Default formatting for CSV / SQL / JSON dumps.',
-      icon: FileCode,
-      body: (
-        <div className="flex flex-col gap-2">
-          <CsvDelimiterRow value={csvDelimiter} onChange={setCsvDelimiter} />
-          <DefaultExportRow
-            value={defaultExportFormat}
-            onChange={setDefaultExportFormat}
-          />
-          <ExportIncludeDdlRow value={exportIncludeDdl} onChange={setExportIncludeDdl} />
-        </div>
-      ),
-    },
-  ];
+  // I5.9 — register the eight built-in sections (Theme / Accent /
+  // Layout / Connection / History / Editor / Results / Exports)
+  // through the `settings_panels` registry. Each section's Component
+  // owns its own store subscriptions, so the SettingsPage no longer
+  // holds the omnibus state slice it used to closure-capture.
+  useEffect(() => registerBuiltinDefaultSettingsSections(), []);
+  const sectionContributions =
+    usePluginContributions<SettingsPanelContributionPayload>('settings_panels');
+  const sections = pluginContributionsToSettingsPanels(sectionContributions);
 
   return (
     <div className="flex h-full w-full flex-1 flex-col bg-canvas">
@@ -952,7 +842,15 @@ export function SettingsPage({ onClose, backLabel = 'Back' }: SettingsPageProps)
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <SettingsNav sections={sections.map(({ id, title, icon }) => ({ id, title, icon }))} />
+        <SettingsNav
+          sections={sections.map(({ id, title, icon }) => ({
+            id,
+            title,
+            // SettingsNav requires an icon; substitute a neutral
+            // placeholder for icon-less contributions.
+            icon: icon ?? Settings,
+          }))}
+        />
         <div className="flex-1 overflow-y-auto px-6 py-8">
           <div className="mx-auto flex max-w-3xl flex-col gap-6">
             {sections.map((s) => (
@@ -961,9 +859,9 @@ export function SettingsPage({ onClose, backLabel = 'Back' }: SettingsPageProps)
                 id={s.id}
                 title={s.title}
                 description={s.description}
-                icon={s.icon}
+                icon={s.icon ?? Settings}
               >
-                {s.body}
+                <s.Component />
               </PageSection>
             ))}
             <p className="pt-4 text-center text-[10px] text-fg-subtle">
@@ -987,7 +885,7 @@ function PageSection({
   id: string;
   title: string;
   description: string;
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   children: ReactNode;
 }) {
   return (
@@ -1019,7 +917,7 @@ function PageSection({
 function SettingsNav({
   sections,
 }: {
-  sections: Array<{ id: string; title: string; icon: LucideIcon }>;
+  sections: Array<{ id: string; title: string; icon: ComponentType<{ className?: string }> }>;
 }) {
   const [active, setActive] = useState<string>(sections[0]?.id ?? '');
   const observerRef = useRef<IntersectionObserver | null>(null);

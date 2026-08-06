@@ -46,6 +46,20 @@ export interface DisplayState {
   /** When `true`, the welcome dashboard renders the rotating Firebird
    *  tips card. Toggle off for a quieter landing surface. */
   showWelcomeTips: boolean;
+  /** Spaces of indentation the JSON exporter emits. `0` → minified,
+   *  `2` / `4` → pretty-printed. */
+  jsonIndent: number;
+  /** Hex-byte preview length the BLOB cell renderer shows in the
+   *  result table button. Defaults to `16` (the legacy value); range
+   *  `4-64`. */
+  blobHexPreviewLength: number;
+  /** Auto-rotation interval in milliseconds for the Firebird tips card.
+   *  `0` → disabled (no auto-rotation, user clicks Next). */
+  tipRotationMs: number;
+  /** Keyword case the basic SQL formatter emits. */
+  sqlFormatterKeywordCase: 'upper' | 'lower' | 'preserve';
+  /** Spaces per indent level the SQL formatter emits. Range `2-8`. */
+  sqlFormatterIndentSize: number;
   setNullDisplay: (value: string) => void;
   setDateFormat: (value: DateFormat) => void;
   setDefaultPageSize: (value: number) => void;
@@ -53,6 +67,11 @@ export interface DisplayState {
   setDefaultExportFormat: (value: ExportFormat) => void;
   setExportIncludeDdl: (value: boolean) => void;
   setShowWelcomeTips: (value: boolean) => void;
+  setJsonIndent: (value: number) => void;
+  setBlobHexPreviewLength: (value: number) => void;
+  setTipRotationMs: (value: number) => void;
+  setSqlFormatterKeywordCase: (value: 'upper' | 'lower' | 'preserve') => void;
+  setSqlFormatterIndentSize: (value: number) => void;
 }
 
 const MAX_NULL_DISPLAY_LENGTH = 32;
@@ -74,9 +93,14 @@ export const useDisplayStore = create<DisplayState>()(
       dateFormat: 'iso',
       defaultPageSize: 100,
       csvDelimiter: ',',
-      defaultExportFormat: 'csv',
+      defaultExportFormat: 'sql',
       exportIncludeDdl: true,
       showWelcomeTips: true,
+      jsonIndent: 2,
+      blobHexPreviewLength: 16,
+      tipRotationMs: 8000,
+      sqlFormatterKeywordCase: 'upper',
+      sqlFormatterIndentSize: 2,
       setNullDisplay: (nullDisplay) =>
         set({ nullDisplay: nullDisplay.slice(0, MAX_NULL_DISPLAY_LENGTH) }),
       setDateFormat: (dateFormat) => set({ dateFormat }),
@@ -95,6 +119,39 @@ export const useDisplayStore = create<DisplayState>()(
       setShowWelcomeTips: (showWelcomeTips) => {
         if (typeof showWelcomeTips === 'boolean') set({ showWelcomeTips });
       },
+      setJsonIndent: (jsonIndent) => {
+        if (Number.isInteger(jsonIndent) && jsonIndent >= 0 && jsonIndent <= 8) {
+          set({ jsonIndent });
+        }
+      },
+      setBlobHexPreviewLength: (blobHexPreviewLength) => {
+        if (
+          Number.isInteger(blobHexPreviewLength)
+          && blobHexPreviewLength >= 4
+          && blobHexPreviewLength <= 64
+        ) {
+          set({ blobHexPreviewLength });
+        }
+      },
+      setTipRotationMs: (tipRotationMs) => {
+        if (Number.isInteger(tipRotationMs) && tipRotationMs >= 0 && tipRotationMs <= 600000) {
+          set({ tipRotationMs });
+        }
+      },
+      setSqlFormatterKeywordCase: (sqlFormatterKeywordCase) => {
+        if (['upper', 'lower', 'preserve'].includes(sqlFormatterKeywordCase)) {
+          set({ sqlFormatterKeywordCase });
+        }
+      },
+      setSqlFormatterIndentSize: (sqlFormatterIndentSize) => {
+        if (
+          Number.isInteger(sqlFormatterIndentSize)
+          && sqlFormatterIndentSize >= 2
+          && sqlFormatterIndentSize <= 8
+        ) {
+          set({ sqlFormatterIndentSize });
+        }
+      },
     }),
     {
       name: 'plamenix.display',
@@ -112,6 +169,11 @@ export const useDisplayStore = create<DisplayState>()(
         defaultExportFormat: s.defaultExportFormat,
         exportIncludeDdl: s.exportIncludeDdl,
         showWelcomeTips: s.showWelcomeTips,
+        jsonIndent: s.jsonIndent,
+        blobHexPreviewLength: s.blobHexPreviewLength,
+        tipRotationMs: s.tipRotationMs,
+        sqlFormatterKeywordCase: s.sqlFormatterKeywordCase,
+        sqlFormatterIndentSize: s.sqlFormatterIndentSize,
       }),
       onRehydrateStorage: () => (rehydrated) => {
         if (!rehydrated) return;

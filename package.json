@@ -14,6 +14,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs"
     },
+    "./plugin-react": {
+      "types": "./dist/plugin-react/index.d.ts",
+      "import": "./dist/plugin-react.mjs"
+    },
     "./theme.css": "./src/styles/theme.css",
     "./package.json": "./package.json"
   },
@@ -39,6 +43,7 @@
     "@codemirror/commands": "^6.7.0",
     "@codemirror/lang-sql": "^6.8.0",
     "@codemirror/language": "^6.10.0",
+    "@codemirror/lint": "^6.8.0",
     "@codemirror/state": "^6.5.0",
     "@codemirror/view": "^6.35.0",
     "@lezer/highlight": "^1.2.3",
@@ -54,6 +59,7 @@
     "react-dom": "^19"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",

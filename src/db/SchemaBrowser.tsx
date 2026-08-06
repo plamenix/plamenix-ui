@@ -1,4 +1,6 @@
 import {
+  useEffect,
+  useRef,
   useState,
   type ComponentType,
   type DragEvent as ReactDragEvent,
@@ -16,24 +18,36 @@ import {
   List as ListIcon,
   Loader2,
   Plus,
+  Power,
   RefreshCw,
   Search,
   Shapes,
+  Sparkles,
+  Square,
   Table2,
   X,
   Zap,
 } from 'lucide-react';
-import {
-  Gauge,
-  KeyRound,
-  Pencil,
-  Play,
-  Power,
-  RefreshCcw,
-  RotateCcw,
-  Trash2,
-} from 'lucide-react';
 import { TableContextMenu, type SchemaMenuItem } from './TableContextMenu';
+import { usePluginContributions } from '../plugin-react/usePluginContributions';
+import {
+  pluginContributionsToMenuItems,
+  type MenuContext,
+  type MenuContributionPayload,
+  type MenuItemDescriptor,
+} from '../menus/menu-contract';
+import {
+  registerBuiltinSchemaContextMenu,
+  SCHEMA_MENU_HEADER_ICONS,
+  SCHEMA_MENU_IDS,
+} from '../menus/builtins/schema-context-menu';
+import {
+  pluginContributionsToSchemaActions,
+  type SchemaActionContributionPayload,
+  type SchemaObjectKind,
+} from './schema-action-contract';
+import { registerBuiltinDbaToolbox } from './builtins/dba-toolbox';
+import type { SchemaDdl } from './schema-actions';
 import type { NewObjectKind } from './NewObjectModal';
 import type { ObjectListKind } from './ObjectListPage';
 import { getModKeyLabel, getShiftKeyLabel } from '../platform';
@@ -70,6 +84,14 @@ export interface SchemaBrowserProps extends SchemaBrowserExtra {
    *  host translates the action into a statement and routes it
    *  through the usual execute path. Omit to suppress all menus. */
   onAction?: (action: SchemaAction) => void;
+  /** Fired when the user picks a plugin-contributed `schema_actions`
+   *  item (I5.5). The browser hands the host a fully-built `SchemaDdl`
+   *  (sql + destructive + confirmPrompt) — same shape `schemaDdl(action)`
+   *  produces for built-in actions — so the host's existing dispatch
+   *  pipeline (autoExecute / insert-into-editor / confirm-then-run)
+   *  routes both paths through the same code. Omit to suppress plugin
+   *  schema-action menu items. */
+  onPluginDdl?: (ddl: SchemaDdl) => void;
   /** Fired when the user clicks the "open list" icon next to a
    *  section header. The host swaps the main content area for an
    *  `ObjectListPage` of the requested entity kind. Omit to hide
@@ -112,7 +134,9 @@ export interface SchemaBrowserProps extends SchemaBrowserExtra {
       | { kind: 'table'; name: string }
       | { kind: 'view'; name: string }
       | { kind: 'procedure'; name: string }
-      | { kind: 'trigger'; name: string },
+      | { kind: 'trigger'; name: string }
+      | { kind: 'generator'; name: string }
+      | { kind: 'domain'; name: string },
   ) => void;
 }
 
@@ -130,96 +154,14 @@ interface MenuState {
   y: number;
 }
 
-const TABLE_MENU: SchemaMenuItem<
-  'alter' | 'create-index' | 'recompute-statistics' | 'recreate' | 'drop'
->[] = [
-  { action: 'alter', label: 'ALTER TABLE…', hint: 'Edit columns or constraints', icon: Pencil },
-  {
-    action: 'create-index',
-    label: 'CREATE INDEX…',
-    hint: 'Add a new index',
-    icon: KeyRound,
-  },
-  {
-    action: 'recompute-statistics',
-    label: 'Recompute statistics',
-    hint: 'SET STATISTICS INDEX for every index on this table',
-    icon: Gauge,
-  },
-  {
-    action: 'recreate',
-    label: 'RECREATE TABLE…',
-    hint: 'DROP + CREATE template — loses all rows',
-    icon: RefreshCcw,
-    tone: 'danger',
-  },
-  { action: 'drop', label: 'DROP', hint: 'Permanently delete this table', icon: Trash2, tone: 'danger' },
-];
-
-const VIEW_MENU: SchemaMenuItem<'alter' | 'show-source' | 'drop'>[] = [
-  { action: 'alter', label: 'ALTER VIEW…', hint: 'Edit the view definition', icon: Pencil },
-  {
-    action: 'show-source',
-    label: 'Show source',
-    hint: 'Insert SELECT against RDB$VIEW_SOURCE',
-    icon: KeyRound,
-  },
-  { action: 'drop', label: 'DROP', hint: 'Permanently delete this view', icon: Trash2, tone: 'danger' },
-];
-
-const PROC_MENU: SchemaMenuItem<'execute' | 'alter' | 'show-source' | 'drop'>[] = [
-  { action: 'execute', label: 'EXECUTE…', hint: 'Insert an EXECUTE PROCEDURE template', icon: Play },
-  { action: 'alter', label: 'ALTER PROCEDURE…', hint: 'Edit the procedure body', icon: Pencil },
-  {
-    action: 'show-source',
-    label: 'Show source',
-    hint: 'Insert SELECT against RDB$PROCEDURE_SOURCE',
-    icon: KeyRound,
-  },
-  { action: 'drop', label: 'DROP', hint: 'Permanently delete this procedure', icon: Trash2, tone: 'danger' },
-];
-
-const TRIGGER_MENU: SchemaMenuItem<'toggle-active' | 'show-source' | 'drop'>[] = [
-  {
-    action: 'toggle-active',
-    label: 'ALTER ACTIVE / INACTIVE',
-    hint: 'Toggle the trigger state',
-    icon: Power,
-  },
-  {
-    action: 'show-source',
-    label: 'Show source',
-    hint: 'Insert SELECT against RDB$TRIGGER_SOURCE',
-    icon: KeyRound,
-  },
-  { action: 'drop', label: 'DROP', hint: 'Permanently delete this trigger', icon: Trash2, tone: 'danger' },
-];
-
-const GEN_MENU: SchemaMenuItem<'next-value' | 'reset' | 'drop'>[] = [
-  {
-    action: 'next-value',
-    label: 'NEXT VALUE FOR',
-    hint: 'Insert SELECT NEXT VALUE FOR',
-    icon: Play,
-  },
-  {
-    action: 'reset',
-    label: 'Reset to 0',
-    hint: 'Insert SET GENERATOR ... TO 0',
-    icon: RotateCcw,
-  },
-  { action: 'drop', label: 'DROP', hint: 'Permanently delete this generator', icon: Trash2, tone: 'danger' },
-];
-
-const DOMAIN_MENU: SchemaMenuItem<'alter-type' | 'drop'>[] = [
-  {
-    action: 'alter-type',
-    label: 'ALTER DOMAIN … TYPE',
-    hint: 'Change the underlying SQL type',
-    icon: Pencil,
-  },
-  { action: 'drop', label: 'DROP', hint: 'Permanently delete this domain', icon: Trash2, tone: 'danger' },
-];
+// I5.2 — the six static menu arrays formerly here (TABLE_MENU /
+// VIEW_MENU / PROC_MENU / TRIGGER_MENU / GEN_MENU / DOMAIN_MENU) now
+// live as `@plamenix-builtin/schema-context-menu` contributions
+// registered on mount in the SchemaBrowser body. `renderMenu` below
+// reads the registry via `usePluginContributions('menus')`, filters
+// by the per-kind `menuId`, and adapts to the dumb TableContextMenu
+// component's `SchemaMenuItem` shape via the dispatch table the
+// adapter returns.
 
 /** Builds the `draggable` + `onDragStart` props that publish `id` as
  *  `text/plain`. Listeners in `SqlEditor` insert that string at the
@@ -266,6 +208,7 @@ export function SchemaBrowser({
   onRefresh,
   onSelect,
   onAction,
+  onPluginDdl,
   onNewTable,
   onPickObjectList,
   onNewObject,
@@ -278,6 +221,52 @@ export function SchemaBrowser({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
   const [menu, setMenu] = useState<MenuState | null>(null);
+
+  // I5.2 — register the built-in schema context-menu through the
+  // shared registry. Closure-capture `onAction` via a ref so the
+  // registered menu items always dispatch through the latest handler
+  // even though `onAction` is re-created per render. The mount
+  // window matches the SchemaBrowser's React lifetime — multiple
+  // SchemaBrowsers mounted simultaneously would double-register and
+  // throw at the registry level, but the shell renders at most one.
+  const onActionRef = useRef(onAction);
+  onActionRef.current = onAction;
+  useEffect(() => {
+    return registerBuiltinSchemaContextMenu({
+      emit: (action) => onActionRef.current?.(action),
+    });
+  }, []);
+
+  // I5.5 — register the DBA toolbox built-in (I4.8) at SchemaBrowser
+  // mount so its two `schema_actions` contributions (RECREATE TABLE +
+  // SET STATISTICS INDEX) surface in the action menu. Independent
+  // useEffect so a future Settings panel can disable it without
+  // affecting the schema-context-menu registration.
+  useEffect(() => registerBuiltinDbaToolbox(), []);
+
+  // Toolbar reads contributions live so registry changes (third-party
+  // menu plugin install, settings reload) re-render the menu without
+  // a remount. Adapter below maps descriptors to the dumb
+  // TableContextMenu's `SchemaMenuItem` shape.
+  const menuContributions =
+    usePluginContributions<MenuContributionPayload>('menus');
+
+  // I5.5 — second registry source for the schema context menu:
+  // `schema_actions` contributions emit raw DDL (built via the
+  // plugin-supplied `buildSql(ctx)` callback) rather than dispatching
+  // a typed `SchemaAction`. Used by third-party plugins that need to
+  // contribute new DDL templates the host has no built-in dispatcher
+  // for (the DBA toolbox built-in is the canonical example — see
+  // `@plamenix-builtin/dba-toolbox` registering `RECREATE TABLE` and
+  // `SET STATISTICS INDEX`). The adapter below merges schema_actions
+  // descriptors with the menus list before render. Dispatch routes
+  // through the host's `onPluginDdl` callback; both shells extract
+  // the existing DDL pipeline (autoExecute / insert-into-editor /
+  // confirm-then-run) into that single helper.
+  const schemaActionContributions =
+    usePluginContributions<SchemaActionContributionPayload>('schema_actions');
+  const onPluginDdlRef = useRef(onPluginDdl);
+  onPluginDdlRef.current = onPluginDdl;
   const [openTables, setOpenTables] = useState(true);
   const [openViews, setOpenViews] = useState(true);
   const [openProcs, setOpenProcs] = useState(false);
@@ -484,6 +473,7 @@ export function SchemaBrowser({
                   onToggle={() => setOpenTables((v) => !v)}
                   onRefresh={onRefresh}
                   busy={busy}
+                  tone="accent"
                   action={
                     onNewTable
                       ? { icon: Plus, label: 'New table…', onClick: onNewTable }
@@ -508,6 +498,7 @@ export function SchemaBrowser({
                   onToggle={() => setOpenViews((v) => !v)}
                   onRefresh={onRefresh}
                   busy={busy}
+                  tone="cyan"
                   onOpenList={
                     onPickObjectList ? () => onPickObjectList('views') : undefined
                   }
@@ -532,6 +523,7 @@ export function SchemaBrowser({
                   onToggle={() => setOpenProcs((v) => !v)}
                   onRefresh={onRefresh}
                   busy={busy}
+                  tone="emerald"
                   onOpenList={
                     onPickObjectList ? () => onPickObjectList('procedures') : undefined
                   }
@@ -579,6 +571,7 @@ export function SchemaBrowser({
                   onToggle={() => setOpenTriggers((v) => !v)}
                   onRefresh={onRefresh}
                   busy={busy}
+                  tone="amber"
                   onOpenList={
                     onPickObjectList ? () => onPickObjectList('triggers') : undefined
                   }
@@ -636,6 +629,7 @@ export function SchemaBrowser({
                   onToggle={() => setOpenGens((v) => !v)}
                   onRefresh={onRefresh}
                   busy={busy}
+                  tone="purple"
                   onOpenList={
                     onPickObjectList ? () => onPickObjectList('generators') : undefined
                   }
@@ -656,6 +650,11 @@ export function SchemaBrowser({
                       gen={g}
                       filter={filter}
                       onSelect={onSelect}
+                      onOpen={
+                        onOpenObject
+                          ? () => onOpenObject({ kind: 'generator', name: g.name })
+                          : undefined
+                      }
                       onContextMenu={
                         onAction ? openMenu({ kind: 'generator', target: g }) : undefined
                       }
@@ -687,6 +686,7 @@ export function SchemaBrowser({
                   onToggle={() => setOpenDomains((v) => !v)}
                   onRefresh={onRefresh}
                   busy={busy}
+                  tone="pink"
                   onOpenList={
                     onPickObjectList ? () => onPickObjectList('domains') : undefined
                   }
@@ -707,6 +707,11 @@ export function SchemaBrowser({
                       domain={d}
                       filter={filter}
                       onSelect={onSelect}
+                      onOpen={
+                        onOpenObject
+                          ? () => onOpenObject({ kind: 'domain', name: d.name })
+                          : undefined
+                      }
                       onContextMenu={
                         onAction ? openMenu({ kind: 'domain', target: d }) : undefined
                       }
@@ -718,97 +723,139 @@ export function SchemaBrowser({
         )}
       </div>
 
-      {menu && onAction && renderMenu(menu, onAction, () => setMenu(null))}
+      {menu &&
+        renderRegistryMenu(
+          menu,
+          menuContributions,
+          schemaActionContributions,
+          (ddl) => onPluginDdlRef.current?.(ddl),
+          () => setMenu(null),
+        )}
     </aside>
   );
 }
 
-function renderMenu(
+/** Adapter from `MenuItemDescriptor[]` to the dumb TableContextMenu's
+ *  `SchemaMenuItem[]` shape plus a dispatch table the host hands to
+ *  the menu's `onAction` callback. */
+function adaptDescriptors(descriptors: MenuItemDescriptor[]): {
+  items: SchemaMenuItem[];
+  dispatch: (action: string) => void;
+} {
+  const items: SchemaMenuItem[] = descriptors.map((d) => {
+    const item: SchemaMenuItem = {
+      action: d.id,
+      label: d.label,
+      hint: d.hint,
+      // Fallback glyph for icon-less contributions — plugin authors
+      // should always supply one but the contract leaves it optional
+      // to keep minimalist plugins viable.
+      icon: d.icon ?? Square,
+    };
+    if (d.tone !== 'default') item.tone = d.tone;
+    return item;
+  });
+  const byId = new Map(descriptors.map((d) => [d.id, d]));
+  const dispatch = (action: string) => {
+    byId.get(action)?.run();
+  };
+  return { items, dispatch };
+}
+
+/** Adapter from `SchemaActionDescriptor[]` (I4.8 schema_actions
+ *  contract) to the dumb TableContextMenu's `SchemaMenuItem` shape.
+ *  Each item's dispatcher hands the host's `onPluginDdl` callback a
+ *  full `SchemaDdl` built from the plugin's `buildSql(ctx)` output.
+ *  Destructive items mark with the danger tone the menu component
+ *  already auto-separates. Items use the `Sparkles` fallback icon so
+ *  third-party plugin actions are visually distinguishable from the
+ *  built-in `menus` items (which carry kind-specific Lucide icons). */
+function adaptSchemaActionDescriptors(
+  kind: SchemaObjectKind,
+  target: unknown,
+  contributions: ReturnType<
+    typeof usePluginContributions<SchemaActionContributionPayload>
+  >,
+  dispatchDdl: (ddl: SchemaDdl) => void,
+): { items: SchemaMenuItem[]; dispatch: (action: string) => void } {
+  const descriptors = pluginContributionsToSchemaActions(contributions, {
+    kind,
+    target: target as { name: string },
+  });
+  const items: SchemaMenuItem[] = descriptors.map((d) => {
+    const item: SchemaMenuItem = {
+      action: d.id,
+      label: d.label,
+      hint: d.hint ?? '',
+      icon: Sparkles,
+    };
+    if (d.destructive) item.tone = 'danger';
+    return item;
+  });
+  const byId = new Map(descriptors.map((d) => [d.id, d]));
+  const dispatch = (action: string) => {
+    const d = byId.get(action);
+    if (!d) return;
+    const ddl: SchemaDdl = {
+      sql: d.buildSql(),
+      destructive: d.destructive,
+    };
+    if (d.confirmPrompt !== null) ddl.confirmPrompt = d.confirmPrompt;
+    dispatchDdl(ddl);
+  };
+  return { items, dispatch };
+}
+
+function renderRegistryMenu(
   menu: MenuState,
-  onAction: (action: SchemaAction) => void,
+  menuContributions: ReturnType<
+    typeof usePluginContributions<MenuContributionPayload>
+  >,
+  schemaActionContributions: ReturnType<
+    typeof usePluginContributions<SchemaActionContributionPayload>
+  >,
+  dispatchDdl: (ddl: SchemaDdl) => void,
   onClose: () => void,
 ) {
   const t = menu.target;
-  switch (t.kind) {
-    case 'table':
-      return (
-        <TableContextMenu
-          x={menu.x}
-          y={menu.y}
-          headerIcon={Table2}
-          kindLabel="table"
-          title={t.target.name}
-          items={TABLE_MENU}
-          onAction={(action) => onAction({ kind: 'table', action, target: t.target })}
-          onClose={onClose}
-        />
-      );
-    case 'view':
-      return (
-        <TableContextMenu
-          x={menu.x}
-          y={menu.y}
-          headerIcon={Eye}
-          kindLabel="view"
-          title={t.target.name}
-          items={VIEW_MENU}
-          onAction={(action) => onAction({ kind: 'view', action, target: t.target })}
-          onClose={onClose}
-        />
-      );
-    case 'procedure':
-      return (
-        <TableContextMenu
-          x={menu.x}
-          y={menu.y}
-          headerIcon={Cog}
-          kindLabel="procedure"
-          title={t.target.name}
-          items={PROC_MENU}
-          onAction={(action) => onAction({ kind: 'procedure', action, target: t.target })}
-          onClose={onClose}
-        />
-      );
-    case 'trigger':
-      return (
-        <TableContextMenu
-          x={menu.x}
-          y={menu.y}
-          headerIcon={Zap}
-          kindLabel="trigger"
-          title={t.target.name}
-          items={TRIGGER_MENU}
-          onAction={(action) => onAction({ kind: 'trigger', action, target: t.target })}
-          onClose={onClose}
-        />
-      );
-    case 'generator':
-      return (
-        <TableContextMenu
-          x={menu.x}
-          y={menu.y}
-          headerIcon={Hash}
-          kindLabel="generator"
-          title={t.target.name}
-          items={GEN_MENU}
-          onAction={(action) => onAction({ kind: 'generator', action, target: t.target })}
-          onClose={onClose}
-        />
-      );
-    case 'domain':
-      return (
-        <TableContextMenu
-          x={menu.x}
-          y={menu.y}
-          headerIcon={Shapes}
-          kindLabel="domain"
-          title={t.target.name}
-          items={DOMAIN_MENU}
-          onAction={(action) => onAction({ kind: 'domain', action, target: t.target })}
-          onClose={onClose}
-        />
-      );
-  }
+  const menuId = SCHEMA_MENU_IDS[t.kind];
+  const ctx: MenuContext = { menuId, target: t.target };
+
+  // Menus first (built-in shell items + third-party menus
+  // contributions), then schema_actions (third-party DDL emitters)
+  // appended after. The two registries serve distinct concerns:
+  // `menus` items dispatch typed `SchemaAction`s through the
+  // existing built-in `schemaDdl(action)` pipeline; `schema_actions`
+  // items emit raw DDL strings the host runs verbatim. The menu
+  // surfaces both; the user does not see the distinction.
+  const menuPair = adaptDescriptors(
+    pluginContributionsToMenuItems(menuContributions, menuId, ctx),
+  );
+  const actionPair = adaptSchemaActionDescriptors(
+    t.kind,
+    t.target,
+    schemaActionContributions,
+    dispatchDdl,
+  );
+  const mergedItems = [...menuPair.items, ...actionPair.items];
+  const dispatch = (action: string) => {
+    if (menuPair.items.some((i) => i.action === action)) menuPair.dispatch(action);
+    else actionPair.dispatch(action);
+  };
+
+  const headerIcon = SCHEMA_MENU_HEADER_ICONS[t.kind];
+  return (
+    <TableContextMenu
+      x={menu.x}
+      y={menu.y}
+      headerIcon={headerIcon}
+      kindLabel={t.kind}
+      title={t.target.name}
+      items={mergedItems}
+      onAction={dispatch}
+      onClose={onClose}
+    />
+  );
 }
 
 interface SectionHeaderProps {
@@ -839,6 +886,9 @@ interface SectionHeaderProps {
   onRefresh?: (() => void) | undefined;
   /** Disables the refresh button + swaps the icon for a spinner. */
   busy?: boolean;
+  /** Optional color tone for the section header background — used to
+   *  make each schema category visually distinct in the sidebar. */
+  tone?: 'accent' | 'cyan' | 'emerald' | 'amber' | 'purple' | 'pink';
 }
 
 function SectionHeader({
@@ -852,21 +902,44 @@ function SectionHeader({
   onOpenList,
   onRefresh,
   busy = false,
+  tone,
 }: SectionHeaderProps) {
+  const toneBg = (() => {
+    switch (tone) {
+      case 'accent':   return 'bg-accent/5 hover:bg-accent/10';
+      case 'cyan':     return 'bg-cyan-500/5 hover:bg-cyan-500/10';
+      case 'emerald':  return 'bg-success/5 hover:bg-success/10';
+      case 'amber':    return 'bg-warning/5 hover:bg-warning/10';
+      case 'purple':   return 'bg-purple-500/5 hover:bg-purple-500/10';
+      case 'pink':     return 'bg-pink-500/5 hover:bg-pink-500/10';
+      default:         return 'hover:bg-elevated';
+    }
+  })();
+  const toneIcon = (() => {
+    switch (tone) {
+      case 'accent':   return 'text-accent';
+      case 'cyan':     return 'text-cyan-400';
+      case 'emerald':  return 'text-success';
+      case 'amber':    return 'text-warning';
+      case 'purple':   return 'text-purple-300';
+      case 'pink':     return 'text-pink-300';
+      default:         return 'text-fg-subtle';
+    }
+  })();
   return (
-    <div className="flex items-center">
+    <div className={`flex items-center border-y border-edge/40 ${tone ? toneBg : ''}`}>
       <button
         type="button"
         onClick={locked ? undefined : onToggle}
         disabled={locked}
-        className="flex flex-1 items-center gap-2 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-muted transition-colors hover:bg-elevated hover:text-fg disabled:hover:bg-transparent disabled:hover:text-fg-muted"
+        className={`flex flex-1 items-center gap-2 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-muted transition-colors hover:text-fg disabled:hover:bg-transparent disabled:hover:text-fg-muted ${tone ? '' : 'hover:bg-elevated'}`}
       >
         {open ? (
           <ChevronDown className="h-3 w-3 shrink-0" />
         ) : (
           <ChevronRight className="h-3 w-3 shrink-0" />
         )}
-        <Icon className="h-3.5 w-3.5 shrink-0" />
+        <Icon className={`h-3.5 w-3.5 shrink-0 ${toneIcon}`} />
         <span>{label}</span>
         <span className="ml-auto text-[10px] tabular-nums text-fg-subtle">{count}</span>
       </button>
@@ -1051,6 +1124,7 @@ interface LeafNodeProps {
   name: string;
   filter: string;
   onSelect?: ((identifier: string) => void) | undefined;
+  onOpen?: (() => void) | undefined;
   /** Optional right-aligned annotation, e.g. parameter counts or SQL type. */
   hint?: ReactNode;
   /** Optional tooltip for the row. Falls back to `name`. */
@@ -1058,7 +1132,15 @@ interface LeafNodeProps {
   onContextMenu?: ((event: ReactMouseEvent<HTMLDivElement>) => void) | undefined;
 }
 
-function LeafNode({ name, filter, onSelect, hint, title, onContextMenu }: LeafNodeProps) {
+function LeafNode({
+  name,
+  filter,
+  onSelect,
+  onOpen,
+  hint,
+  title,
+  onContextMenu,
+}: LeafNodeProps) {
   const inner = (
     <span className="truncate font-mono text-[12px]" title={title ?? name}>
       {highlightMatch(name, filter)}
@@ -1069,20 +1151,33 @@ function LeafNode({ name, filter, onSelect, hint, title, onContextMenu }: LeafNo
       onContextMenu={onContextMenu}
       className="group flex items-center gap-1.5 px-3 py-1 pl-7 transition-colors hover:bg-elevated"
     >
-      {onSelect ? (
-        <button
-          type="button"
-          onClick={() => onSelect(name)}
-          className="flex-1 truncate text-left text-fg transition-colors hover:text-accent"
-          {...dragProps(name)}
-        >
-          {inner}
-        </button>
-      ) : (
-        <span className="flex-1 truncate text-fg" {...dragProps(name)}>
-          {inner}
-        </span>
-      )}
+      {(() => {
+        // Single click prefers the host-wired open action. Domains have
+        // no rows; pasting the bare name into the editor is rarely what
+        // the user wants. Drag still inserts the identifier.
+        const handleClick = onOpen ?? (onSelect ? () => onSelect(name) : undefined);
+        const tooltip = onOpen
+          ? `${title ?? name} — click to view DDL, drag to insert`
+          : title ?? name;
+        return handleClick ? (
+          <button
+            type="button"
+            onClick={handleClick}
+            className="flex-1 truncate text-left text-fg transition-colors hover:text-accent"
+            title={tooltip}
+            {...dragProps(name)}
+          >
+            {inner}
+          </button>
+        ) : (
+          <span
+            className="flex-1 truncate text-fg"
+            {...dragProps(name)}
+          >
+            {inner}
+          </span>
+        );
+      })()}
       {hint && (
         <span className="shrink-0 font-mono text-[10px] uppercase text-fg-subtle">{hint}</span>
       )}
@@ -1249,12 +1344,14 @@ function GeneratorNode({
   gen,
   filter,
   onSelect,
+  onOpen,
   onContextMenu,
   onSetValue,
 }: {
   gen: GeneratorInfo;
   filter: string;
   onSelect?: ((identifier: string) => void) | undefined;
+  onOpen?: (() => void) | undefined;
   onContextMenu?: ((event: ReactMouseEvent<HTMLDivElement>) => void) | undefined;
   onSetValue?: ((next: number) => void) | undefined;
 }) {
@@ -1299,24 +1396,34 @@ function GeneratorNode({
       onContextMenu={onContextMenu}
       className="group flex items-center gap-1.5 px-3 py-1 pl-7 transition-colors hover:bg-elevated"
     >
-      {onSelect ? (
-        <button
-          type="button"
-          onClick={() => onSelect(gen.name)}
-          className="flex-1 truncate text-left font-mono text-[12px] text-fg transition-colors hover:text-accent"
-          title={gen.name}
-          {...dragProps(gen.name)}
-        >
-          {highlightMatch(gen.name, filter)}
-        </button>
-      ) : (
-        <span
-          className="flex-1 truncate font-mono text-[12px] text-fg"
-          {...dragProps(gen.name)}
-        >
-          {highlightMatch(gen.name, filter)}
-        </span>
-      )}
+      {(() => {
+        // Prefer single-click open when the host wires it — generators
+        // have no rows to browse and pasting the bare name into the
+        // editor is rarely what the user wants. Drag still inserts the
+        // identifier; the kebab menu / double-click insert it on demand.
+        const handleClick = onOpen ?? (onSelect ? () => onSelect(gen.name) : undefined);
+        const title = onOpen
+          ? `${gen.name} — click to view DDL, drag to insert`
+          : gen.name;
+        return handleClick ? (
+          <button
+            type="button"
+            onClick={handleClick}
+            className="flex-1 truncate text-left font-mono text-[12px] text-fg transition-colors hover:text-accent"
+            title={title}
+            {...dragProps(gen.name)}
+          >
+            {highlightMatch(gen.name, filter)}
+          </button>
+        ) : (
+          <span
+            className="flex-1 truncate font-mono text-[12px] text-fg"
+            {...dragProps(gen.name)}
+          >
+            {highlightMatch(gen.name, filter)}
+          </span>
+        );
+      })()}
       {editing ? (
         <input
           type="number"
@@ -1356,11 +1463,13 @@ function DomainNode({
   domain,
   filter,
   onSelect,
+  onOpen,
   onContextMenu,
 }: {
   domain: DomainInfo;
   filter: string;
   onSelect?: ((identifier: string) => void) | undefined;
+  onOpen?: (() => void) | undefined;
   onContextMenu?: ((event: ReactMouseEvent<HTMLDivElement>) => void) | undefined;
 }) {
   const hint = (
@@ -1374,6 +1483,7 @@ function DomainNode({
       name={domain.name}
       filter={filter}
       onSelect={onSelect}
+      onOpen={onOpen}
       hint={hint}
       title={`${domain.name} ${domain.sqlType}${domain.nullable ? '' : ' NOT NULL'}`}
       onContextMenu={onContextMenu}

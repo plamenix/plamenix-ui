@@ -410,6 +410,11 @@ export type Profile = {
 	 *  see `plamenix_types::ConnectionConfig::charset` for the list.
 	 */
 	charset?: string | null,
+	/**
+	 *  `true` when the profile attaches via Firebird's embedded
+	 *  engine; `host`/`port` are ignored.
+	 */
+	embedded?: boolean,
 };
 
 /**

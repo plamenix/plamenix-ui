@@ -50,3 +50,6 @@ desktop.ini
 .eslintcache
 .stylelintcache
 .cache/
+
+# Claude Code session pointer (local only)
+.claude-session.txt

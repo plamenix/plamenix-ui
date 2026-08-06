@@ -15,9 +15,16 @@ import {
   Code2,
   FileTerminal,
   Loader2,
+  Sparkles,
   X,
   XCircle,
 } from 'lucide-react';
+import { usePluginContributions } from '../plugin-react/usePluginContributions';
+import {
+  pickSqlFormatter,
+  type SqlFormatterContributionPayload,
+} from '../formatters/sql-formatter-contract';
+import { registerBuiltinBasicSqlFormatter } from '../formatters/builtins/basic-formatter';
 import type { DdlSourceKind } from './schema-actions';
 
 export interface DdlViewerModalProps {
@@ -44,6 +51,8 @@ const KIND_LABEL: Record<DdlSourceKind, string> = {
   view: 'VIEW',
   procedure: 'PROCEDURE',
   trigger: 'TRIGGER',
+  generator: 'GENERATOR',
+  domain: 'DOMAIN',
 };
 
 export function DdlViewerModal({
@@ -56,7 +65,19 @@ export function DdlViewerModal({
   onOpenInEditor,
 }: DdlViewerModalProps) {
   const [copied, setCopied] = useState(false);
+  /** When non-null, the Format button has been pressed and the body
+   *  shows the formatted version instead of the raw source. Reset on
+   *  modal close + on source change so reopening on a different
+   *  object starts fresh. */
+  const [formatted, setFormatted] = useState<string | null>(null);
   const open = kind !== null && name !== null;
+
+  // I5.6 — register the basic built-in SQL formatter once per modal
+  // mount. Same idempotent ref-bridge pattern as other built-in
+  // registrations; the modal renders at most once per shell.
+  useEffect(() => registerBuiltinBasicSqlFormatter(), []);
+  const formatterContributions =
+    usePluginContributions<SqlFormatterContributionPayload>('sql_formatters');
 
   useEffect(() => {
     if (!open) return;
@@ -71,12 +92,27 @@ export function DdlViewerModal({
   }, [open, onClose]);
 
   useEffect(() => {
-    if (!open) setCopied(false);
+    if (!open) {
+      setCopied(false);
+      setFormatted(null);
+    }
   }, [open]);
+
+  useEffect(() => {
+    // Source-change while open (a different object surfaces) — drop
+    // any stale formatted preview.
+    setFormatted(null);
+  }, [source]);
 
   if (!open || !kind || !name) return null;
 
-  const body = source ?? '';
+  const rawBody = source ?? '';
+  const body = formatted ?? rawBody;
+  const formatter = pickSqlFormatter(formatterContributions, 'firebird');
+  const handleFormat = () => {
+    if (!formatter || rawBody.length === 0) return;
+    setFormatted(formatter.format(rawBody));
+  };
   const handleCopy = () => {
     if (!body) return;
     void navigator.clipboard.writeText(body).catch(() => {});
@@ -137,6 +173,22 @@ export function DdlViewerModal({
         </div>
 
         <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-edge bg-canvas px-3 py-2">
+          {formatter && (
+            <button
+              type="button"
+              onClick={handleFormat}
+              disabled={!rawBody || loading}
+              title={
+                formatted
+                  ? `Re-format via ${formatter.label}`
+                  : `Format via ${formatter.label}`
+              }
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-fg-subtle transition-colors hover:bg-elevated hover:text-fg disabled:opacity-50"
+            >
+              <Sparkles className="h-3 w-3" />
+              {formatted ? 'Re-format' : 'Format'}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleCopy}

@@ -21,6 +21,7 @@ export const DEFAULT_FORM: ConnectionForm = {
   encryptionRequired: false,
   fbclientPath: '',
   charset: 'UTF8',
+  embedded: false,
 };
 
 /** Per-tab state. Each tab is independent: its own session, SQL
@@ -86,6 +87,20 @@ export interface TabState {
    *  results table. Cleared when the user runs a different query in
    *  the editor or closes the view. `null` outside table-focus mode. */
   focusedObjectName: string | null;
+  /** Procedure / trigger / generator / domain (and bare-DDL view) the
+   *  user has opened from the schema browser. Drives the in-pane
+   *  `RoutineObjectView`; cleared when the user runs anything new in
+   *  the editor or closes the view. Holds the kind, name, fetched
+   *  source body, and loading / error chrome the view needs. */
+  focusedRoutine:
+    | {
+        kind: 'view' | 'procedure' | 'trigger' | 'generator' | 'domain';
+        name: string;
+        source: string | null;
+        loading: boolean;
+        error: string | null;
+      }
+    | null;
 }
 
 /** Tab-store actions. State mutation goes exclusively through these;
@@ -116,14 +131,12 @@ export type TabsStore = {
   activeTabId: string;
 } & TabsStoreActions;
 
-const SQL_PLACEHOLDER = "SELECT 42 AS answer, 'plamenix' AS name FROM RDB$DATABASE";
-
 function freshTab(): TabState {
   return {
     id: crypto.randomUUID(),
     title: 'New tab',
     sessionId: null,
-    sql: SQL_PLACEHOLDER,
+    sql: '',
     executedSql: null,
     results: null,
     cryptState: null,
@@ -143,6 +156,7 @@ function freshTab(): TabState {
     testing: false,
     testResult: null,
     focusedObjectName: null,
+    focusedRoutine: null,
   };
 }
 
@@ -171,7 +185,10 @@ interface PersistedTabsState {
 
 /** Strips secrets from a form before persistence. */
 function sanitiseForm(form: ConnectionForm): ConnectionForm {
-  return { ...form, password: '', encryptionKey: '' };
+  // TEST-ONLY: persists `masterkey` instead of clearing so the connection
+  // form stays prefilled across reloads. REMOVE before deploy + restore
+  // the previous behaviour (`password: ''`, `encryptionKey: ''`).
+  return { ...form, password: 'masterkey', encryptionKey: '' };
 }
 
 /** Rebuilds a live `TabState` from a persisted projection, resetting
@@ -180,6 +197,10 @@ function inflateTab(saved: PersistedTab): TabState {
   return {
     id: saved.id,
     title: saved.title,
+    // sessionId is intentionally NOT pulled from `saved`. It's the
+    // only field whose lifetime must match the webview lifetime, not
+    // the localStorage lifetime — see the `plamenix.session.<tabId>`
+    // sessionStorage layer the host maintains.
     sessionId: null,
     sql: saved.sql,
     executedSql: saved.executedSql,
@@ -190,7 +211,9 @@ function inflateTab(saved: PersistedTab): TabState {
     busy: false,
     // Merge against DEFAULT_FORM so older persisted shapes pick up
     // newer fields (e.g. `fbclientPath`) with controlled defaults.
-    form: { ...DEFAULT_FORM, ...saved.form },
+    // TEST-ONLY: ensure prefill survives even when the persisted form
+    // was saved before the sanitiser change above. Drop on deploy.
+    form: { ...DEFAULT_FORM, ...saved.form, password: 'masterkey' },
     selectedProfileId: saved.selectedProfileId,
     profileName: saved.profileName,
     profileColor: saved.profileColor ?? null,
@@ -203,6 +226,7 @@ function inflateTab(saved: PersistedTab): TabState {
     testing: false,
     testResult: null,
     focusedObjectName: null,
+    focusedRoutine: null,
   };
 }
 
@@ -278,8 +302,25 @@ export const useTabsStore = create<TabsStore>()(
     },
     {
       name: 'plamenix.tabs',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState, fromVersion) => {
+        // v1 → v2: pre-1.0.0-beta tabs shipped with a demo SQL
+        // placeholder (`SELECT 42 AS answer, …`) baked into every
+        // fresh tab. Drop it so already-persisted tabs land empty
+        // for users coming from the test build.
+        const PRE_BETA_PLACEHOLDER =
+          "SELECT 42 AS answer, 'plamenix' AS name FROM RDB$DATABASE";
+        if (fromVersion < 2 && persistedState && typeof persistedState === 'object') {
+          const state = persistedState as PersistedTabsState;
+          if (Array.isArray(state.tabs)) {
+            state.tabs = state.tabs.map((t) =>
+              t.sql === PRE_BETA_PLACEHOLDER ? { ...t, sql: '' } : t,
+            );
+          }
+        }
+        return persistedState as PersistedTabsState;
+      },
       partialize: (s): PersistedTabsState => ({
         activeTabId: s.activeTabId,
         tabs: s.tabs.map(

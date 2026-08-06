@@ -7,10 +7,23 @@ import {
   Play,
   RefreshCw,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 import { CryptBadge } from './CryptBadge';
 import { SqlEditor, type BookmarkMap } from './SqlEditor';
+import { ToolbarSlot } from '../toolbar/ToolbarSlot';
+import { usePluginContributions } from '../plugin-react/usePluginContributions';
+import {
+  pickSqlFormatter,
+  type SqlFormatterContributionPayload,
+} from '../formatters/sql-formatter-contract';
 import type { CryptState, Schema } from './types';
+
+/** Per-button shape the `tab` toolbar slot hands plugins. */
+interface TabToolbarCtx {
+  sessionId: string | null;
+  busy: boolean;
+}
 
 /** Health states the QueryPanel can render. Mirrors `TabState['health']`. */
 export type SessionHealth = 'unknown' | 'healthy' | 'reconnecting' | 'dead';
@@ -110,6 +123,23 @@ export interface QueryPanelProps {
   /** Triggers a manual reconnect attempt. The Reconnect button is
    *  rendered when `health === 'dead'` and this handler is supplied. */
   onReconnect?: () => void;
+  /** Forwarded to the inner {@link SqlEditor}. Shell uses this to emit
+   *  `editor/focused` events (I6.11). */
+  onEditorFocus?: (() => void) | undefined;
+  /** Forwarded to the inner {@link SqlEditor}. Shell uses this to emit
+   *  `editor/selection-changed` events (I6.11). */
+  onEditorSelectionChange?:
+    | ((sel: { anchor: number; head: number }) => void)
+    | undefined;
+  /** Aggregated stats from the most recent execute — used to render a
+   *  small footer below the SQL editor with total duration + row count
+   *  across every emitted result. `null` when no query has been run on
+   *  this tab yet. */
+  lastResultSummary?: {
+    totalDurationMs: number;
+    totalRows: number;
+    statementCount: number;
+  } | null;
 }
 
 /**
@@ -133,13 +163,29 @@ export function QueryPanel({
   engineVersion = null,
   encryptionKeySupplied = false,
   onReconnect,
+  onEditorFocus,
+  onEditorSelectionChange,
+  lastResultSummary = null,
 }: QueryPanelProps) {
   const isMac =
     typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
   const mod = isMac ? '⌘' : 'Ctrl';
 
+  // I5.6 — read the active SQL-formatter contributions (basic
+  // built-in registered by DdlViewerModal mount; third-party
+  // formatters install through the registry). The Format button only
+  // surfaces when at least one applicable formatter is registered.
+  const formatterContributions =
+    usePluginContributions<SqlFormatterContributionPayload>('sql_formatters');
+  const formatter = pickSqlFormatter(formatterContributions, 'firebird');
+  const handleFormatBuffer = () => {
+    if (!formatter || sql.length === 0) return;
+    const next = formatter.format(sql);
+    if (next !== sql) onSqlChange(next);
+  };
+
   return (
-    <section className="flex flex-col overflow-hidden rounded-lg border border-edge bg-panel">
+    <section className="flex flex-col overflow-hidden rounded-lg bg-panel">
       <header className="flex items-center justify-between gap-3 border-b border-edge bg-canvas px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <span
@@ -170,6 +216,29 @@ export function QueryPanel({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {/* I5.3 — plugin-contributed tab-toolbar buttons sit ahead
+              of the shell-owned action cluster. Each button receives
+              the live {sessionId, busy} ctx through its `when` + `run`
+              callbacks. */}
+          <ToolbarSlot<TabToolbarCtx> location="tab" ctx={{ sessionId, busy }} />
+          {/* I5.6 — Format buffer button. Surfaces when at least one
+              `sql_formatters` contribution applies to the Firebird
+              dialect (the basic built-in always does once
+              DdlViewerModal mounts). Runs in-place via the existing
+              onSqlChange pipe; no shell state changes beyond the
+              editor buffer. */}
+          {formatter && (
+            <button
+              type="button"
+              onClick={handleFormatBuffer}
+              disabled={busy || sql.length === 0}
+              title={`Format buffer via ${formatter.label}`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-edge px-2.5 py-1 text-xs text-fg-muted transition-colors hover:bg-elevated hover:text-fg disabled:opacity-50"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Format
+            </button>
+          )}
           {health === 'dead' && onReconnect && (
             <button
               type="button"
@@ -248,7 +317,32 @@ export function QueryPanel({
         schema={schema}
         bookmarks={bookmarks}
         onBookmarksChange={onBookmarksChange}
+        onFocus={onEditorFocus}
+        onSelectionChange={onEditorSelectionChange}
       />
+      {lastResultSummary && (
+        <footer
+          className="flex items-center gap-3 border-t border-edge bg-elevated px-3 py-1 font-mono text-[10px] text-fg-subtle"
+          aria-label="Last query stats"
+        >
+          <span>
+            {lastResultSummary.totalDurationMs.toLocaleString()} ms
+          </span>
+          <span aria-hidden className="h-3 w-px bg-edge" />
+          <span>
+            {lastResultSummary.totalRows.toLocaleString()}{' '}
+            row{lastResultSummary.totalRows === 1 ? '' : 's'}
+          </span>
+          {lastResultSummary.statementCount > 1 && (
+            <>
+              <span aria-hidden className="h-3 w-px bg-edge" />
+              <span>
+                {lastResultSummary.statementCount} statements
+              </span>
+            </>
+          )}
+        </footer>
+      )}
     </section>
   );
 }

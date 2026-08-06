@@ -78,6 +78,11 @@ export interface ConnectionForm {
    *  `WIN1250` for Croatian / Czech / Polish databases that predate
    *  UTF8 collations). */
   charset: string;
+  /** When true, attach via Firebird's embedded engine — `database`
+   *  is a local file path; `host` and `port` are ignored; the OS
+   *  user becomes the attached user (no password). Exclusive access
+   *  only. Native mode required. */
+  embedded: boolean;
 }
 
 /** Charset choices surfaced by the connection dialog. Values match

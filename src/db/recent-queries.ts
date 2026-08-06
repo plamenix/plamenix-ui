@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 /** A single executed statement captured for the welcome-dashboard
  *  snippet. Distinct from the desktop's persisted {@link HistoryEntry}
@@ -47,9 +48,11 @@ function nextId(): string {
   return `r${Date.now().toString(36)}-${counter}`;
 }
 
-export const useRecentQueries = create<RecentQueriesStore>()((set) => ({
-  byKey: {},
-  record: (key, entry) =>
+export const useRecentQueries = create<RecentQueriesStore>()(
+  persist(
+    (set) => ({
+      byKey: {},
+      record: (key, entry) =>
     set((s) => {
       const existing = s.byKey[key] ?? [];
       const next: RecentQuery = { id: nextId(), ...entry };
@@ -80,7 +83,14 @@ export const useRecentQueries = create<RecentQueriesStore>()((set) => ({
       if (!changed) return s;
       return { byKey: { ...s.byKey, [key]: next } };
     }),
-}));
+    }),
+    {
+      name: 'plamenix.recent-queries',
+      version: 1,
+      partialize: (s) => ({ byKey: s.byKey }),
+    },
+  ),
+);
 
 /** Pulls the recent-query list for `key`. Returns an empty array when
  *  the key is absent — callers don't need to null-check.

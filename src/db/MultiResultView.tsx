@@ -17,6 +17,12 @@ import {
 import type { ColumnInfo, Schema, StatementOutcome } from './types';
 
 export interface MultiResultViewProps {
+  /** Tab the view renders for. Threaded through to inner
+   *  {@link ResultTable} instances for event emit + interceptor
+   *  context (cell-commit, row-insert, row-delete). */
+  tabId: string;
+  /** Session backing the outcomes. `null` when between sessions. */
+  sessionId: string | null;
   /** Per-statement outcomes from the most recent batch execute. */
   outcomes: StatementOutcome[];
   /** Pixel height for each result viewport. Defaults to 360 so several
@@ -67,6 +73,8 @@ export interface MultiResultViewProps {
  * result with the SQL they ran.
  */
 export function MultiResultView({
+  tabId,
+  sessionId,
   outcomes,
   height = 360,
   schema = null,
@@ -84,6 +92,8 @@ export function MultiResultView({
       {outcomes.map((o, i) => (
         <StatementCard
           key={i}
+          tabId={tabId}
+          sessionId={sessionId}
           index={i + 1}
           total={outcomes.length}
           outcome={o}
@@ -103,6 +113,8 @@ export function MultiResultView({
 }
 
 interface StatementCardProps {
+  tabId: string;
+  sessionId: string | null;
   index: number;
   total: number;
   outcome: StatementOutcome;
@@ -123,6 +135,8 @@ interface StatementCardProps {
 }
 
 function StatementCard({
+  tabId,
+  sessionId,
   index,
   total,
   outcome,
@@ -229,19 +243,19 @@ function StatementCard({
             {index}/{total}
           </span>
         )}
+        <span className="flex-1" />
         <span
-          className="flex-1 truncate font-mono text-[11px] text-fg-muted"
+          className="shrink-0 font-mono text-[10px] text-fg-subtle"
           title={outcome.sql}
         >
-          {preview}
-        </span>
-        <span className="shrink-0 font-mono text-[10px] text-fg-subtle">
           {outcome.durationMs.toLocaleString()} ms
         </span>
       </header>
 
       {ok ? (
         <ResultTable
+          tabId={tabId}
+          sessionId={sessionId}
           result={outcome.result}
           height={height}
           embedded

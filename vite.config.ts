@@ -13,12 +13,26 @@ export default defineConfig({
   ],
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
+      // Multi-entry library: the main shell + the standalone plugin-
+      // author SDK live as separate ESM bundles so plugin authors do
+      // not pull in the full UI surface when they only need the React
+      // SDK. Both are produced from the same `src/` tree to defer the
+      // workspace split per `CLAUDE.md` guidance.
+      entry: {
+        index: resolve(__dirname, 'src/index.ts'),
+        'plugin-react': resolve(__dirname, 'src/plugin-react/index.ts'),
+      },
       formats: ['es'],
-      fileName: () => 'index.mjs',
+      fileName: (_format, entryName) => `${entryName}.mjs`,
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'react/jsx-runtime'],
+      // Externalised in both entry bundles. The shell edition wires
+      // host-provided modules to these specifiers via an import map
+      // at boot so plugin bundles share the host's React + icon
+      // instances (Hooks rules + Context only work when React is
+      // shared by identity). The recipe is documented in
+      // `plamenix/docs/plugin-authoring.md`.
+      external: ['react', 'react-dom', 'react/jsx-runtime', 'lucide-react'],
       output: {
         preserveModules: false,
       },
