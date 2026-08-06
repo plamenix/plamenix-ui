@@ -1,10 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import {
-  PluginInstallDialog,
-  type PendingPluginInstall,
-} from './PluginInstallDialog.js';
+import { PluginInstallDialog, type PendingPluginInstall } from './PluginInstallDialog.js';
 
 const pending = (overrides: Partial<PendingPluginInstall> = {}): PendingPluginInstall => ({
   id: 'org.example.fmt',
@@ -28,13 +25,7 @@ describe('PluginInstallDialog (I7.1)', () => {
   });
 
   it('renders plugin metadata + identity dl', () => {
-    render(
-      <PluginInstallDialog
-        pending={pending()}
-        onConfirm={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
+    render(<PluginInstallDialog pending={pending()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getByText('Format SQL')).toBeTruthy();
     expect(screen.getByText(/v1\.2\.3/)).toBeTruthy();
@@ -68,19 +59,11 @@ describe('PluginInstallDialog (I7.1)', () => {
       />,
     );
     expect(screen.queryByText('Required permissions')).toBeNull();
-    expect(
-      screen.getByText(/does not declare any required permissions/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/does not declare any required permissions/i)).toBeTruthy();
   });
 
   it('optional permissions section is collapsed by default + expands on click', () => {
-    render(
-      <PluginInstallDialog
-        pending={pending()}
-        onConfirm={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
+    render(<PluginInstallDialog pending={pending()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     const toggle = screen.getByRole('button', { name: /Optional permissions/i });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByRole('checkbox')).toBeNull();
@@ -101,13 +84,7 @@ describe('PluginInstallDialog (I7.1)', () => {
   });
 
   it('selected-count badge updates as user toggles checkboxes', () => {
-    render(
-      <PluginInstallDialog
-        pending={pending()}
-        onConfirm={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
+    render(<PluginInstallDialog pending={pending()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     const toggle = screen.getByRole('button', { name: /Optional permissions/i });
     expect(screen.getByText('0/2 selected')).toBeTruthy();
     fireEvent.click(toggle);
@@ -123,13 +100,7 @@ describe('PluginInstallDialog (I7.1)', () => {
 
   it('fires onConfirm with plugin id + empty optional set when nothing selected', () => {
     const onConfirm = vi.fn();
-    render(
-      <PluginInstallDialog
-        pending={pending()}
-        onConfirm={onConfirm}
-        onCancel={vi.fn()}
-      />,
-    );
+    render(<PluginInstallDialog pending={pending()} onConfirm={onConfirm} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /Install/ }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledWith('org.example.fmt', []);
@@ -137,13 +108,7 @@ describe('PluginInstallDialog (I7.1)', () => {
 
   it('fires onConfirm with chosen optional subset', () => {
     const onConfirm = vi.fn();
-    render(
-      <PluginInstallDialog
-        pending={pending()}
-        onConfirm={onConfirm}
-        onCancel={vi.fn()}
-      />,
-    );
+    render(<PluginInstallDialog pending={pending()} onConfirm={onConfirm} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /Optional permissions/i }));
     const [first] = screen.getAllByRole('checkbox') as HTMLInputElement[];
     fireEvent.click(first!);
@@ -158,9 +123,7 @@ describe('PluginInstallDialog (I7.1)', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
-    rerender(
-      <PluginInstallDialog pending={pending()} onConfirm={vi.fn()} onCancel={onCancel} />,
-    );
+    rerender(<PluginInstallDialog pending={pending()} onConfirm={vi.fn()} onCancel={onCancel} />);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel install' }));
     expect(onCancel).toHaveBeenCalledTimes(2);
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -191,13 +154,7 @@ describe('PluginInstallDialog (I7.1)', () => {
   });
 
   it('dialog carries aria-modal + aria-labelledby + aria-describedby', () => {
-    render(
-      <PluginInstallDialog
-        pending={pending()}
-        onConfirm={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
+    render(<PluginInstallDialog pending={pending()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     const dialog = screen.getByRole('dialog');
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
@@ -231,24 +188,18 @@ describe('PluginInstallDialog — signature banner (I7.16)', () => {
   afterEach(() => cleanup());
 
   it('hides the signature banner when signature is undefined', () => {
-    render(
-      <PluginInstallDialog
-        pending={pending()}
-        onConfirm={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
+    render(<PluginInstallDialog pending={pending()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.queryByText('Signature verified')).toBeNull();
     expect(screen.queryByText('Unsigned plugin')).toBeNull();
     expect(screen.queryByText('Signature invalid')).toBeNull();
   });
 
-  it('renders verified banner with public key hex + key id', () => {
+  it('renders the signed banner with public key hex + key id', () => {
     render(
       <PluginInstallDialog
         pending={pending({
           signature: {
-            status: 'verified',
+            status: 'selfSigned',
             publicKeyHex: 'a'.repeat(64),
             keyId: 'ci-bot',
           },
@@ -257,17 +208,20 @@ describe('PluginInstallDialog — signature banner (I7.16)', () => {
         onCancel={vi.fn()}
       />,
     );
-    expect(screen.getByText('Signature verified')).toBeTruthy();
+    expect(screen.getByText(/publisher not verified/i)).toBeTruthy();
     expect(screen.getByText(/key: aaaa/)).toBeTruthy();
     expect(screen.getByText('id: ci-bot')).toBeTruthy();
+    // The badge must not claim the publisher was checked — the signing
+    // key ships inside the archive.
+    expect(screen.queryByText('Signature verified')).toBeNull();
   });
 
-  it('renders verified banner without key id row when keyId is undefined', () => {
+  it('renders the signed banner without a key id row when keyId is undefined', () => {
     render(
       <PluginInstallDialog
         pending={pending({
           signature: {
-            status: 'verified',
+            status: 'selfSigned',
             publicKeyHex: 'b'.repeat(64),
           },
         })}
@@ -275,7 +229,7 @@ describe('PluginInstallDialog — signature banner (I7.16)', () => {
         onCancel={vi.fn()}
       />,
     );
-    expect(screen.getByText('Signature verified')).toBeTruthy();
+    expect(screen.getByText(/publisher not verified/i)).toBeTruthy();
     expect(screen.queryByText(/^id:/)).toBeNull();
   });
 

@@ -73,7 +73,11 @@ export interface PendingPluginInstall {
  *  refusal cases the host returns (`SignatureMissing` /
  *  `SignatureInvalid`). */
 export type PluginSignatureState =
-  | { status: 'verified'; publicKeyHex: string; keyId?: string; signedAt?: string }
+  /** The archive matches a signature made with the key carried inside
+   *  it. Integrity, not identity: anyone can sign their own bundle, so
+   *  this says the file was not altered after signing and nothing about
+   *  who signed it. Named to stop the UI claiming more than that. */
+  | { status: 'selfSigned'; publicKeyHex: string; keyId?: string; signedAt?: string }
   | { status: 'unsigned' }
   | { status: 'invalid'; reason: string };
 
@@ -85,24 +89,15 @@ export interface PluginInstallDialogProps {
    *  `pending.optionalPermissions` the user chose to grant. The host
    *  is expected to persist required + chosen optional and call its
    *  install API. */
-  onConfirm: (
-    pluginId: string,
-    grantedOptional: string[],
-  ) => void;
+  onConfirm: (pluginId: string, grantedOptional: string[]) => void;
   /** Fires when the user cancels (Esc / cancel button / backdrop). */
   onCancel: () => void;
 }
 
-export function PluginInstallDialog({
-  pending,
-  onConfirm,
-  onCancel,
-}: PluginInstallDialogProps) {
+export function PluginInstallDialog({ pending, onConfirm, onCancel }: PluginInstallDialogProps) {
   const titleId = useId();
   const descId = useId();
-  const [optionalGranted, setOptionalGranted] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [optionalGranted, setOptionalGranted] = useState<Set<string>>(() => new Set());
   const [optionalExpanded, setOptionalExpanded] = useState(false);
 
   // Reset selection + collapse state every time the dialog opens for
@@ -197,10 +192,7 @@ export function PluginInstallDialog({
                 v{pending.version}
               </span>
             </h3>
-            <p
-              id={descId}
-              className="mt-1 text-[12px] text-fg-muted"
-            >
+            <p id={descId} className="mt-1 text-[12px] text-fg-muted">
               {pending.description ?? (
                 <span className="italic text-fg-subtle">No description provided.</span>
               )}
@@ -217,9 +209,7 @@ export function PluginInstallDialog({
             </dl>
           </section>
 
-          {pending.signature && (
-            <SignatureBanner signature={pending.signature} />
-          )}
+          {pending.signature && <SignatureBanner signature={pending.signature} />}
 
           {required.length > 0 ? (
             <section
@@ -227,10 +217,7 @@ export function PluginInstallDialog({
               aria-labelledby={`${titleId}-required-heading`}
             >
               <div className="mb-2 flex items-start gap-2">
-                <AlertTriangle
-                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-400"
-                  aria-hidden
-                />
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden />
                 <div>
                   <h4
                     id={`${titleId}-required-heading`}
@@ -239,8 +226,7 @@ export function PluginInstallDialog({
                     Required permissions
                   </h4>
                   <p className="mt-0.5 text-[11px] text-fg-muted">
-                    Installing this plugin grants every permission in
-                    this batch. Cancel to refuse.
+                    Installing this plugin grants every permission in this batch. Cancel to refuse.
                   </p>
                 </div>
               </div>
@@ -332,27 +318,27 @@ export function PluginInstallDialog({
 /** Renders the signature-state banner (I7.16). Exported so other
  *  surfaces (e.g. the Permissions panel, a future audit log) can
  *  show the same visual language. */
-export function SignatureBanner({
-  signature,
-}: {
-  signature: PluginSignatureState;
-}) {
-  if (signature.status === 'verified') {
+export function SignatureBanner({ signature }: { signature: PluginSignatureState }) {
+  if (signature.status === 'selfSigned') {
+    // Deliberately not a green "verified" badge. The signing key ships
+    // inside the archive, so this proves the file was not altered after
+    // signing and says nothing about who signed it. The key is shown so
+    // a user who knows what to expect can compare it; the UI does not
+    // interpret it for them.
     return (
       <section
-        className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3"
-        aria-label="Signature verified"
+        className="rounded-lg border border-edge bg-elevated p-3"
+        aria-label="Signed, publisher not verified"
       >
         <div className="flex items-start gap-2">
-          <ShieldCheck
-            className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400"
-            aria-hidden
-          />
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" aria-hidden />
           <div className="min-w-0 flex-1 text-[11px] text-fg-muted">
-            <div className="font-medium text-fg">Signature verified</div>
-            <div className="mt-0.5 truncate font-mono text-[10px]">
-              key: {signature.publicKeyHex}
+            <div className="font-medium text-fg">Signed &mdash; publisher not verified</div>
+            <div className="mt-0.5">
+              The file has not been altered since it was signed. Plamenix cannot check who signed
+              it, so trust this plugin only as much as you trust where you got it.
             </div>
+            <div className="mt-1 truncate font-mono text-[10px]">key: {signature.publicKeyHex}</div>
             {signature.keyId && (
               <div className="text-[10px] text-fg-subtle">id: {signature.keyId}</div>
             )}
@@ -369,16 +355,12 @@ export function SignatureBanner({
         role="alert"
       >
         <div className="flex items-start gap-2">
-          <ShieldAlert
-            className="mt-0.5 h-4 w-4 shrink-0 text-amber-400"
-            aria-hidden
-          />
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden />
           <div className="min-w-0 flex-1 text-[11px] text-fg-muted">
             <div className="font-medium text-fg">Signature invalid</div>
             <p className="mt-0.5">
-              The archive carries a signature that did not verify.
-              Installing is unsafe — the bundle may have been
-              tampered with after signing.
+              The archive carries a signature that did not verify. Installing is unsafe — the bundle
+              may have been tampered with after signing.
             </p>
             <p className="mt-1 text-[10px] text-fg-subtle">{signature.reason}</p>
           </div>
@@ -394,15 +376,12 @@ export function SignatureBanner({
       role="alert"
     >
       <div className="flex items-start gap-2">
-        <ShieldX
-          className="mt-0.5 h-4 w-4 shrink-0 text-red-400"
-          aria-hidden
-        />
+        <ShieldX className="mt-0.5 h-4 w-4 shrink-0 text-red-400" aria-hidden />
         <div className="text-[11px] text-fg-muted">
           <div className="font-medium text-fg">Unsigned plugin</div>
           <p className="mt-0.5">
-            This archive has no signature. The host cannot verify who
-            built it. Install only if you trust the source.
+            This archive has no signature. The host cannot verify who built it. Install only if you
+            trust the source.
           </p>
         </div>
       </div>
