@@ -162,6 +162,13 @@ export type ConnectionConfig = {
 	 *  unencrypted environments when the user expects an encrypted one.
 	 */
 	encryption_required?: boolean,
+	/**
+	 *  If `true`, attach via Firebird's embedded engine — the
+	 *  `database` field is treated as a local file path; `host` and
+	 *  `port` are ignored. Exclusive access only (no other process may
+	 *  be holding the file open).
+	 */
+	embedded?: boolean,
 };
 
 /**  Encryption state of an attached Firebird database. */
@@ -411,8 +418,10 @@ export type Profile = {
 	 */
 	charset?: string | null,
 	/**
-	 *  `true` when the profile attaches via Firebird's embedded
-	 *  engine; `host`/`port` are ignored.
+	 *  `true` when the profile attaches via Firebird's embedded engine
+	 *  (the `database` field is a local file path; `host`/`port` are
+	 *  ignored). Defaults to `false` so legacy profiles continue to
+	 *  behave as remote-server connections.
 	 */
 	embedded?: boolean,
 };
