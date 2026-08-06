@@ -134,9 +134,7 @@ export interface QueryPanelProps {
   onEditorFocus?: (() => void) | undefined;
   /** Forwarded to the inner {@link SqlEditor}. Shell uses this to emit
    *  `editor/selection-changed` events (I6.11). */
-  onEditorSelectionChange?:
-    | ((sel: { anchor: number; head: number }) => void)
-    | undefined;
+  onEditorSelectionChange?: ((sel: { anchor: number; head: number }) => void) | undefined;
   /** Aggregated stats from the most recent execute — used to render a
    *  small footer below the SQL editor with total duration + row count
    *  across every emitted result. `null` when no query has been run on
@@ -174,8 +172,7 @@ export function QueryPanel({
   onEditorSelectionChange,
   lastResultSummary = null,
 }: QueryPanelProps) {
-  const isMac =
-    typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
   const mod = isMac ? '⌘' : 'Ctrl';
 
   // I5.6 — read the active SQL-formatter contributions (basic
@@ -199,8 +196,7 @@ export function QueryPanel({
             className="truncate font-mono text-[10px] text-fg-subtle"
             title={`Session ${sessionId}`}
           >
-            session{' '}
-            <span className="text-fg-muted">{sessionId.slice(0, 8)}</span>
+            session <span className="text-fg-muted">{sessionId.slice(0, 8)}</span>
           </span>
           {cryptState !== undefined && (
             <>
@@ -309,10 +305,9 @@ export function QueryPanel({
           <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
             Encryption key supplied but the database attached as
-            <span className="px-1 font-mono">unencrypted</span>. The current
-            driver cannot forward keys to fbclient; install a KeyHolder
-            plugin (e.g. IBSurgeon EPF) in the fbclient plugin path if you
-            expect this database to be encrypted at rest.
+            <span className="px-1 font-mono">unencrypted</span>. The current driver cannot forward
+            keys to fbclient; install a KeyHolder plugin (e.g. IBSurgeon EPF) in the fbclient plugin
+            path if you expect this database to be encrypted at rest.
           </span>
         </div>
       )}
@@ -333,20 +328,16 @@ export function QueryPanel({
           className="flex items-center gap-3 border-t border-edge bg-elevated px-3 py-1 font-mono text-[10px] text-fg-subtle"
           aria-label="Last query stats"
         >
-          <span>
-            {lastResultSummary.totalDurationMs.toLocaleString()} ms
-          </span>
+          <span>{lastResultSummary.totalDurationMs.toLocaleString()} ms</span>
           <span aria-hidden className="h-3 w-px bg-edge" />
           <span>
-            {lastResultSummary.totalRows.toLocaleString()}{' '}
-            row{lastResultSummary.totalRows === 1 ? '' : 's'}
+            {lastResultSummary.totalRows.toLocaleString()} row
+            {lastResultSummary.totalRows === 1 ? '' : 's'}
           </span>
           {lastResultSummary.statementCount > 1 && (
             <>
               <span aria-hidden className="h-3 w-px bg-edge" />
-              <span>
-                {lastResultSummary.statementCount} statements
-              </span>
+              <span>{lastResultSummary.statementCount} statements</span>
             </>
           )}
         </footer>
