@@ -153,8 +153,14 @@ export type SchemaAction =
       kind: 'generator';
       action: 'set-value';
       target: GeneratorInfo;
-      /** New target value for the generator counter. */
-      value: number;
+      /** New target value for the generator counter, as exact decimal
+       *  text — a generator is a BIGINT and does not fit a JS number.
+       *
+       *  This is interpolated into DDL, so it must already have passed
+       *  `parseExactInt`, which admits only an optional sign followed by
+       *  digits within the signed 64-bit range. Never assign a raw draft
+       *  string here. */
+      value: string;
       /** Active engine version string (e.g. `'3.0.7'`). Drives the
        *  dialect choice in {@link schemaDdl}: ALTER SEQUENCE RESTART
        *  WITH for FB 3+, SET GENERATOR TO for older. `null` defaults

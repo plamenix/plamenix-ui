@@ -87,8 +87,14 @@ export type ColumnValue =
 { type: "null" } | 
 /**  Textual data (CHAR, VARCHAR, BLOB `SUB_TYPE` TEXT). */
 { type: "text"; value: string } | 
-/**  64-bit signed integer (SMALLINT, INTEGER, BIGINT). */
-{ type: "integer"; value: number } | 
+/**
+ *  64-bit signed integer (SMALLINT, INTEGER, BIGINT).
+ * 
+ *  Carried as decimal text: the magnitude is the user's data, and a
+ *  `BIGINT` past 2^53 cannot survive a JSON number. See
+ *  [`plamenix_types::exact_int`].
+ */
+{ type: "integer"; value: string } | 
 /**  Double-precision floating point (FLOAT, DOUBLE PRECISION). */
 { type: "float"; value: number | null } | 
 /**  Boolean (FB 3.0+ `BOOLEAN`). */
@@ -228,8 +234,11 @@ export type GeneratorInfo = {
 	 *  time. Surfaced by the welcome dashboard and the inline editor in
 	 *  the schema browser. `0` for a freshly created generator that has
 	 *  never been incremented.
+	 * 
+	 *  Carried as decimal text: a Firebird generator is a `BIGINT` and
+	 *  spans the full 64-bit range. See [`exact_int`].
 	 */
-	currentValue: number,
+	currentValue: string,
 };
 
 /**  One entry from the per-profile SQL query history. */

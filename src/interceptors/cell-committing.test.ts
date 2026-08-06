@@ -86,12 +86,12 @@ describe('cellCommittingChain (I6.13)', () => {
       return { action: 'continue' };
     });
     await cellCommittingChain.run(ctx({
-      previousValue: { type: 'integer', value: 10 },
-      nextValue: { type: 'integer', value: 20 },
+      previousValue: { type: 'integer', value: '10' },
+      nextValue: { type: 'integer', value: '20' },
     }));
     expect(seen[0]).toEqual({
-      prev: { type: 'integer', value: 10 },
-      next: { type: 'integer', value: 20 },
+      prev: { type: 'integer', value: '10' },
+      next: { type: 'integer', value: '20' },
     });
   });
 

@@ -51,6 +51,7 @@ import type { SchemaDdl } from './schema-actions';
 import type { NewObjectKind } from './NewObjectModal';
 import type { ObjectListKind } from './ObjectListPage';
 import { getModKeyLabel, getShiftKeyLabel } from '../platform';
+import { compareExactInt, formatExactInt, parseExactInt } from './exact-int';
 import type {
   DomainInfo,
   GeneratorInfo,
@@ -248,8 +249,7 @@ export function SchemaBrowser({
   // menu plugin install, settings reload) re-render the menu without
   // a remount. Adapter below maps descriptors to the dumb
   // TableContextMenu's `SchemaMenuItem` shape.
-  const menuContributions =
-    usePluginContributions<MenuContributionPayload>('menus');
+  const menuContributions = usePluginContributions<MenuContributionPayload>('menus');
 
   // I5.5 — second registry source for the schema context menu:
   // `schema_actions` contributions emit raw DDL (built via the
@@ -290,8 +290,7 @@ export function SchemaBrowser({
   const allTriggers = schema?.triggers ?? [];
   const allGens = schema?.generators ?? [];
   const allDomains = schema?.domains ?? [];
-  const matchesFilter = (name: string) =>
-    !isSearching || name.toLowerCase().includes(lower);
+  const matchesFilter = (name: string) => !isSearching || name.toLowerCase().includes(lower);
   // Tables/views: keep the table when its name matches OR any of its
   // columns match. `columnHits` carries the matching column names so we
   // can auto-expand the row and the renderer can highlight them.
@@ -315,9 +314,7 @@ export function SchemaBrowser({
   const tables = tableMatches.map((m) => m.table);
   const views = viewMatches.map((m) => m.table);
   const procs = allProcs.filter((p) => matchesFilter(p.name));
-  const triggers = allTriggers.filter(
-    (t) => matchesFilter(t.name) || matchesFilter(t.relation),
-  );
+  const triggers = allTriggers.filter((t) => matchesFilter(t.name) || matchesFilter(t.relation));
   const gens = allGens.filter((g) => matchesFilter(g.name));
   const domains = allDomains.filter((d) => matchesFilter(d.name));
   const showTables = isSearching || openTables;
@@ -348,11 +345,7 @@ export function SchemaBrowser({
         onToggle={() => toggle(entry.table.name)}
         onSelect={onSelect}
         onOpen={onOpen}
-        onContextMenu={
-          onAction
-            ? openMenu({ kind: tableKind, target: entry.table })
-            : undefined
-        }
+        onContextMenu={onAction ? openMenu({ kind: tableKind, target: entry.table }) : undefined}
         onShowDdl={
           onShowDdl && entry.table.kind === 'view'
             ? () => onShowDdl('view', entry.table.name)
@@ -479,9 +472,7 @@ export function SchemaBrowser({
                       ? { icon: Plus, label: 'New table…', onClick: onNewTable }
                       : undefined
                   }
-                  onOpenList={
-                    onPickObjectList ? () => onPickObjectList('tables') : undefined
-                  }
+                  onOpenList={onPickObjectList ? () => onPickObjectList('tables') : undefined}
                 />
                 {showTables && tableMatches.map(renderTableNode)}
               </>
@@ -499,9 +490,7 @@ export function SchemaBrowser({
                   onRefresh={onRefresh}
                   busy={busy}
                   tone="cyan"
-                  onOpenList={
-                    onPickObjectList ? () => onPickObjectList('views') : undefined
-                  }
+                  onOpenList={onPickObjectList ? () => onPickObjectList('views') : undefined}
                   action={
                     onNewObject
                       ? { icon: Plus, label: 'New view…', onClick: () => onNewObject('view') }
@@ -524,9 +513,7 @@ export function SchemaBrowser({
                   onRefresh={onRefresh}
                   busy={busy}
                   tone="emerald"
-                  onOpenList={
-                    onPickObjectList ? () => onPickObjectList('procedures') : undefined
-                  }
+                  onOpenList={onPickObjectList ? () => onPickObjectList('procedures') : undefined}
                   action={
                     onNewObject
                       ? {
@@ -552,9 +539,7 @@ export function SchemaBrowser({
                       onContextMenu={
                         onAction ? openMenu({ kind: 'procedure', target: p }) : undefined
                       }
-                      onShowDdl={
-                        onShowDdl ? () => onShowDdl('procedure', p.name) : undefined
-                      }
+                      onShowDdl={onShowDdl ? () => onShowDdl('procedure', p.name) : undefined}
                     />
                   ))}
               </>
@@ -572,9 +557,7 @@ export function SchemaBrowser({
                   onRefresh={onRefresh}
                   busy={busy}
                   tone="amber"
-                  onOpenList={
-                    onPickObjectList ? () => onPickObjectList('triggers') : undefined
-                  }
+                  onOpenList={onPickObjectList ? () => onPickObjectList('triggers') : undefined}
                   action={
                     onNewObject
                       ? {
@@ -610,9 +593,7 @@ export function SchemaBrowser({
                               })
                           : undefined
                       }
-                      onShowDdl={
-                        onShowDdl ? () => onShowDdl('trigger', t.name) : undefined
-                      }
+                      onShowDdl={onShowDdl ? () => onShowDdl('trigger', t.name) : undefined}
                     />
                   ))}
               </>
@@ -630,9 +611,7 @@ export function SchemaBrowser({
                   onRefresh={onRefresh}
                   busy={busy}
                   tone="purple"
-                  onOpenList={
-                    onPickObjectList ? () => onPickObjectList('generators') : undefined
-                  }
+                  onOpenList={onPickObjectList ? () => onPickObjectList('generators') : undefined}
                   action={
                     onNewObject
                       ? {
@@ -687,9 +666,7 @@ export function SchemaBrowser({
                   onRefresh={onRefresh}
                   busy={busy}
                   tone="pink"
-                  onOpenList={
-                    onPickObjectList ? () => onPickObjectList('domains') : undefined
-                  }
+                  onOpenList={onPickObjectList ? () => onPickObjectList('domains') : undefined}
                   action={
                     onNewObject
                       ? {
@@ -712,9 +689,7 @@ export function SchemaBrowser({
                           ? () => onOpenObject({ kind: 'domain', name: d.name })
                           : undefined
                       }
-                      onContextMenu={
-                        onAction ? openMenu({ kind: 'domain', target: d }) : undefined
-                      }
+                      onContextMenu={onAction ? openMenu({ kind: 'domain', target: d }) : undefined}
                     />
                   ))}
               </>
@@ -773,9 +748,7 @@ function adaptDescriptors(descriptors: MenuItemDescriptor[]): {
 function adaptSchemaActionDescriptors(
   kind: SchemaObjectKind,
   target: unknown,
-  contributions: ReturnType<
-    typeof usePluginContributions<SchemaActionContributionPayload>
-  >,
+  contributions: ReturnType<typeof usePluginContributions<SchemaActionContributionPayload>>,
   dispatchDdl: (ddl: SchemaDdl) => void,
 ): { items: SchemaMenuItem[]; dispatch: (action: string) => void } {
   const descriptors = pluginContributionsToSchemaActions(contributions, {
@@ -808,9 +781,7 @@ function adaptSchemaActionDescriptors(
 
 function renderRegistryMenu(
   menu: MenuState,
-  menuContributions: ReturnType<
-    typeof usePluginContributions<MenuContributionPayload>
-  >,
+  menuContributions: ReturnType<typeof usePluginContributions<MenuContributionPayload>>,
   schemaActionContributions: ReturnType<
     typeof usePluginContributions<SchemaActionContributionPayload>
   >,
@@ -828,9 +799,7 @@ function renderRegistryMenu(
   // existing built-in `schemaDdl(action)` pipeline; `schema_actions`
   // items emit raw DDL strings the host runs verbatim. The menu
   // surfaces both; the user does not see the distinction.
-  const menuPair = adaptDescriptors(
-    pluginContributionsToMenuItems(menuContributions, menuId, ctx),
-  );
+  const menuPair = adaptDescriptors(pluginContributionsToMenuItems(menuContributions, menuId, ctx));
   const actionPair = adaptSchemaActionDescriptors(
     t.kind,
     t.target,
@@ -906,24 +875,38 @@ function SectionHeader({
 }: SectionHeaderProps) {
   const toneBg = (() => {
     switch (tone) {
-      case 'accent':   return 'bg-accent/5 hover:bg-accent/10';
-      case 'cyan':     return 'bg-cyan-500/5 hover:bg-cyan-500/10';
-      case 'emerald':  return 'bg-success/5 hover:bg-success/10';
-      case 'amber':    return 'bg-warning/5 hover:bg-warning/10';
-      case 'purple':   return 'bg-purple-500/5 hover:bg-purple-500/10';
-      case 'pink':     return 'bg-pink-500/5 hover:bg-pink-500/10';
-      default:         return 'hover:bg-elevated';
+      case 'accent':
+        return 'bg-accent/5 hover:bg-accent/10';
+      case 'cyan':
+        return 'bg-cyan-500/5 hover:bg-cyan-500/10';
+      case 'emerald':
+        return 'bg-success/5 hover:bg-success/10';
+      case 'amber':
+        return 'bg-warning/5 hover:bg-warning/10';
+      case 'purple':
+        return 'bg-purple-500/5 hover:bg-purple-500/10';
+      case 'pink':
+        return 'bg-pink-500/5 hover:bg-pink-500/10';
+      default:
+        return 'hover:bg-elevated';
     }
   })();
   const toneIcon = (() => {
     switch (tone) {
-      case 'accent':   return 'text-accent';
-      case 'cyan':     return 'text-cyan-400';
-      case 'emerald':  return 'text-success';
-      case 'amber':    return 'text-warning';
-      case 'purple':   return 'text-purple-300';
-      case 'pink':     return 'text-pink-300';
-      default:         return 'text-fg-subtle';
+      case 'accent':
+        return 'text-accent';
+      case 'cyan':
+        return 'text-cyan-400';
+      case 'emerald':
+        return 'text-success';
+      case 'amber':
+        return 'text-warning';
+      case 'purple':
+        return 'text-purple-300';
+      case 'pink':
+        return 'text-pink-300';
+      default:
+        return 'text-fg-subtle';
     }
   })();
   return (
@@ -952,11 +935,7 @@ function SectionHeader({
           aria-label={`Refresh ${label.toLowerCase()}`}
           className="mr-1 flex h-6 w-6 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-elevated hover:text-fg disabled:opacity-50"
         >
-          {busy ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3 w-3" />
-          )}
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
         </button>
       )}
       {onOpenList && (
@@ -1030,11 +1009,7 @@ function TableNode({
           className="text-fg-subtle hover:text-fg"
           aria-label={expanded ? 'Collapse columns' : 'Expand columns'}
         >
-          {expanded ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
+          {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         </button>
         {handleNameClick ? (
           <button
@@ -1097,9 +1072,7 @@ function TableNode({
               )}
               <span
                 className={`shrink-0 font-mono text-[10px] uppercase ${
-                  c.sqlType.includes('[]')
-                    ? 'text-warning'
-                    : 'text-fg-subtle'
+                  c.sqlType.includes('[]') ? 'text-warning' : 'text-fg-subtle'
                 }`}
                 title={
                   c.sqlType.includes('[]')
@@ -1132,15 +1105,7 @@ interface LeafNodeProps {
   onContextMenu?: ((event: ReactMouseEvent<HTMLDivElement>) => void) | undefined;
 }
 
-function LeafNode({
-  name,
-  filter,
-  onSelect,
-  onOpen,
-  hint,
-  title,
-  onContextMenu,
-}: LeafNodeProps) {
+function LeafNode({ name, filter, onSelect, onOpen, hint, title, onContextMenu }: LeafNodeProps) {
   const inner = (
     <span className="truncate font-mono text-[12px]" title={title ?? name}>
       {highlightMatch(name, filter)}
@@ -1158,7 +1123,7 @@ function LeafNode({
         const handleClick = onOpen ?? (onSelect ? () => onSelect(name) : undefined);
         const tooltip = onOpen
           ? `${title ?? name} — click to view DDL, drag to insert`
-          : title ?? name;
+          : (title ?? name);
         return handleClick ? (
           <button
             type="button"
@@ -1170,10 +1135,7 @@ function LeafNode({
             {inner}
           </button>
         ) : (
-          <span
-            className="flex-1 truncate text-fg"
-            {...dragProps(name)}
-          >
+          <span className="flex-1 truncate text-fg" {...dragProps(name)}>
             {inner}
           </span>
         );
@@ -1202,9 +1164,7 @@ function ProcedureNode({
 }) {
   const hint = `${proc.inputCount}→${proc.outputCount}`;
   const handleNameClick = onOpen ?? (onSelect ? () => onSelect(proc.name) : undefined);
-  const nameTitle = onOpen
-    ? `${proc.name} — click to view DDL, drag to insert`
-    : proc.name;
+  const nameTitle = onOpen ? `${proc.name} — click to view DDL, drag to insert` : proc.name;
   return (
     <div
       onContextMenu={onContextMenu}
@@ -1229,9 +1189,7 @@ function ProcedureNode({
           {highlightMatch(proc.name, filter)}
         </span>
       )}
-      <span className="shrink-0 font-mono text-[10px] uppercase text-fg-subtle">
-        {hint}
-      </span>
+      <span className="shrink-0 font-mono text-[10px] uppercase text-fg-subtle">{hint}</span>
       {onShowDdl && (
         <button
           type="button"
@@ -1265,9 +1223,7 @@ function TriggerNode({
   onShowDdl?: (() => void) | undefined;
 }) {
   const label = decodeTriggerType(trigger.triggerType);
-  const nameClass = trigger.active
-    ? 'text-fg'
-    : 'text-fg-subtle line-through';
+  const nameClass = trigger.active ? 'text-fg' : 'text-fg-subtle line-through';
   const renderedName = (
     <>
       {highlightMatch(trigger.name, filter)}
@@ -1353,13 +1309,15 @@ function GeneratorNode({
   onSelect?: ((identifier: string) => void) | undefined;
   onOpen?: (() => void) | undefined;
   onContextMenu?: ((event: ReactMouseEvent<HTMLDivElement>) => void) | undefined;
-  onSetValue?: ((next: number) => void) | undefined;
+  /** Receives the new value as exact decimal text — a generator is a
+   *  BIGINT and does not fit a JS number. */
+  onSetValue?: ((next: string) => void) | undefined;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(gen.currentValue));
+  const [draft, setDraft] = useState(gen.currentValue);
 
   const beginEdit = () => {
-    setDraft(String(gen.currentValue));
+    setDraft(gen.currentValue);
     setEditing(true);
   };
 
@@ -1369,18 +1327,18 @@ function GeneratorNode({
       setEditing(false);
       return;
     }
-    const next = Number(trimmed);
-    if (!Number.isFinite(next) || !Number.isSafeInteger(next)) {
+    const next = parseExactInt(trimmed);
+    if (next === null) {
       setEditing(false);
       return;
     }
-    if (next === gen.currentValue) {
+    if (compareExactInt(next, gen.currentValue) === 0) {
       setEditing(false);
       return;
     }
-    if (next < gen.currentValue) {
+    if (compareExactInt(next, gen.currentValue) < 0) {
       const ok = window.confirm(
-        `Lower generator ${gen.name} from ${gen.currentValue.toLocaleString()} to ${next.toLocaleString()}? New rows may collide with existing values.`,
+        `Lower generator ${gen.name} from ${formatExactInt(gen.currentValue)} to ${formatExactInt(next)}? New rows may collide with existing values.`,
       );
       if (!ok) {
         setEditing(false);
@@ -1402,9 +1360,7 @@ function GeneratorNode({
         // editor is rarely what the user wants. Drag still inserts the
         // identifier; the kebab menu / double-click insert it on demand.
         const handleClick = onOpen ?? (onSelect ? () => onSelect(gen.name) : undefined);
-        const title = onOpen
-          ? `${gen.name} — click to view DDL, drag to insert`
-          : gen.name;
+        const title = onOpen ? `${gen.name} — click to view DDL, drag to insert` : gen.name;
         return handleClick ? (
           <button
             type="button"
@@ -1416,10 +1372,7 @@ function GeneratorNode({
             {highlightMatch(gen.name, filter)}
           </button>
         ) : (
-          <span
-            className="flex-1 truncate font-mono text-[12px] text-fg"
-            {...dragProps(gen.name)}
-          >
+          <span className="flex-1 truncate font-mono text-[12px] text-fg" {...dragProps(gen.name)}>
             {highlightMatch(gen.name, filter)}
           </span>
         );
@@ -1447,12 +1400,12 @@ function GeneratorNode({
           type="button"
           onClick={onSetValue ? beginEdit : undefined}
           disabled={!onSetValue}
-          title={onSetValue ? 'Click to set generator value' : gen.currentValue.toLocaleString()}
+          title={onSetValue ? 'Click to set generator value' : formatExactInt(gen.currentValue)}
           className={`shrink-0 rounded px-1 py-0.5 text-right font-mono text-[11px] tabular-nums text-fg-muted transition-colors ${
             onSetValue ? 'cursor-text hover:bg-elevated hover:text-fg' : ''
           }`}
         >
-          {gen.currentValue.toLocaleString()}
+          {formatExactInt(gen.currentValue)}
         </button>
       )}
     </div>

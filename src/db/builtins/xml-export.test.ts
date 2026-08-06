@@ -21,13 +21,13 @@ const COLUMNS: ColumnDescription[] = [
 const ROWS: Row[] = [
   {
     cells: [
-      { type: 'integer', value: 1 },
+      { type: 'integer', value: '1' },
       { type: 'text', value: 'Alice <admin>' },
     ],
   },
   {
     cells: [
-      { type: 'integer', value: 2 },
+      { type: 'integer', value: '2' },
       { type: 'null' },
     ],
   },
@@ -101,7 +101,7 @@ describe('builtin XML export (I4.5)', () => {
     const rows: Row[] = [
       {
         cells: [
-          { type: 'integer', value: 42 },
+          { type: 'integer', value: '42' },
           { type: 'float', value: 3.14 },
           { type: 'bool', value: true },
           {

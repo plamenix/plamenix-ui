@@ -13,7 +13,7 @@ const insertCtx = (overrides: Partial<RowInsertingContext> = {}): RowInsertingCo
   sessionId: 's1',
   table: 'CUSTOMERS',
   values: [
-    { column: 'ID', value: { type: 'integer', value: 1 } },
+    { column: 'ID', value: { type: 'integer', value: '1' } },
     { column: 'NAME', value: { type: 'string', value: 'Alice' } },
   ],
   sql: "INSERT INTO CUSTOMERS (ID, NAME) VALUES (1, 'Alice')",

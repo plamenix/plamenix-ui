@@ -91,7 +91,7 @@ describe('pluginContributionsToExportButtons', () => {
     ]);
     const result = await buttons[0]!.onSelect({
       columns: [{ name: 'id', sqlType: 'INT', nullable: false }],
-      rows: [{ cells: [{ type: 'integer', value: 1 }] }],
+      rows: [{ cells: [{ type: 'integer', value: '1' }] }],
       tableName: 'users',
     });
     expect(receivedArgs?.tableName).toBe('users');

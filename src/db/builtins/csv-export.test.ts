@@ -23,21 +23,21 @@ const COLUMNS: ColumnInfo[] = [
 const ROWS: Row[] = [
   {
     cells: [
-      { type: 'integer', value: 1 },
+      { type: 'integer', value: '1' },
       { type: 'text', value: 'Alice' },
       { type: 'text', value: 'hello' },
     ],
   },
   {
     cells: [
-      { type: 'integer', value: 2 },
+      { type: 'integer', value: '2' },
       { type: 'text', value: 'Bob, Jr.' },
       { type: 'text', value: 'line one\nline two' },
     ],
   },
   {
     cells: [
-      { type: 'integer', value: 3 },
+      { type: 'integer', value: '3' },
       { type: 'null' },
       { type: 'text', value: 'has "quotes"' },
     ],
@@ -123,7 +123,7 @@ describe('builtin CSV export (I4.2)', () => {
         cells: [
           { type: 'null' },
           { type: 'text', value: 'hi' },
-          { type: 'integer', value: 42 },
+          { type: 'integer', value: '42' },
         ],
       },
       {

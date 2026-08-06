@@ -22,14 +22,14 @@ const COLUMNS: ColumnDescription[] = [
 const ROWS: Row[] = [
   {
     cells: [
-      { type: 'integer', value: 1 },
+      { type: 'integer', value: '1' },
       { type: 'text', value: 'Alice' },
       { type: 'null' },
     ],
   },
   {
     cells: [
-      { type: 'integer', value: 2 },
+      { type: 'integer', value: '2' },
       { type: 'text', value: "O'Brien" },
       { type: 'text', value: 'note two' },
     ],
@@ -156,7 +156,7 @@ describe('builtin SQL export (I4.4)', () => {
       {
         cells: [
           { type: 'null' },
-          { type: 'integer', value: 42 },
+          { type: 'integer', value: '42' },
           { type: 'float', value: 3.14 },
           { type: 'bool', value: true },
           {

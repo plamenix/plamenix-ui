@@ -103,7 +103,7 @@ describe('pickCellRenderer', () => {
       pickCellRenderer(all, { cell: { type: 'null' }, columnName: 'x', columnInfo: null, rowIndex: 0 }),
     ).toBe(claimsNullsOnly);
     expect(
-      pickCellRenderer(all, { cell: { type: 'integer', value: 1 }, columnName: 'x', columnInfo: null, rowIndex: 0 }),
+      pickCellRenderer(all, { cell: { type: 'integer', value: '1' }, columnName: 'x', columnInfo: null, rowIndex: 0 }),
     ).toBeNull();
     expect(
       pickCellRenderer(all, {

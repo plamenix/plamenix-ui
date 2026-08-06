@@ -35,6 +35,7 @@ import {
   X,
 } from 'lucide-react';
 import { quoteIdent } from './schema-actions';
+import { compareExactInt, formatExactInt, parseExactInt } from './exact-int';
 import type {
   DomainInfo,
   GeneratorInfo,
@@ -209,10 +210,8 @@ const PROCEDURES_SPEC: KindSpec<ProcedureInfo> = {
       key: 'kind',
       label: 'Kind',
       width: '20%',
-      render: (p) =>
-        p.outputCount > 0 ? 'Selectable' : 'Executable',
-      compare: (a, b) =>
-        Number(b.outputCount > 0) - Number(a.outputCount > 0),
+      render: (p) => (p.outputCount > 0 ? 'Selectable' : 'Executable'),
+      compare: (a, b) => Number(b.outputCount > 0) - Number(a.outputCount > 0),
     },
   ],
 };
@@ -250,9 +249,7 @@ const TRIGGERS_SPEC: KindSpec<TriggerInfo> = {
       render: (t) => (
         <span
           className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-            t.active
-              ? 'bg-success-subtle text-success'
-              : 'bg-danger-subtle text-danger'
+            t.active ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'
           }`}
         >
           {t.active ? 'active' : 'inactive'}
@@ -276,11 +273,9 @@ const GENERATORS_SPEC: KindSpec<GeneratorInfo> = {
       width: '40%',
       align: 'right',
       render: (g) => (
-        <span className="font-mono tabular-nums">
-          {g.currentValue.toLocaleString()}
-        </span>
+        <span className="font-mono tabular-nums">{formatExactInt(g.currentValue)}</span>
       ),
-      compare: (a, b) => a.currentValue - b.currentValue,
+      compare: (a, b) => compareExactInt(a.currentValue, b.currentValue),
     },
   ],
 };
@@ -427,17 +422,15 @@ export function ObjectListPage({
   };
 
   const dropSql = (names: string[]): string =>
-    names
-      .map((n) => `DROP ${spec.dropKeyword} ${quoteIdent(n)};`)
-      .join('\n');
+    names.map((n) => `DROP ${spec.dropKeyword} ${quoteIdent(n)};`).join('\n');
 
-  const [editingGenerator, setEditingGenerator] = useState<
-    { name: string; draft: string } | null
-  >(null);
+  const [editingGenerator, setEditingGenerator] = useState<{ name: string; draft: string } | null>(
+    null,
+  );
 
   const beginEditGenerator = (gen: GeneratorInfo) => {
     if (busy) return;
-    setEditingGenerator({ name: gen.name, draft: String(gen.currentValue) });
+    setEditingGenerator({ name: gen.name, draft: gen.currentValue });
   };
 
   const commitGeneratorEdit = async (gen: GeneratorInfo) => {
@@ -447,18 +440,18 @@ export function ObjectListPage({
       setEditingGenerator(null);
       return;
     }
-    const next = Number(trimmed);
-    if (!Number.isFinite(next) || !Number.isSafeInteger(next)) {
+    const next = parseExactInt(trimmed);
+    if (next === null) {
       setEditingGenerator(null);
       return;
     }
-    if (next === gen.currentValue) {
+    if (compareExactInt(next, gen.currentValue) === 0) {
       setEditingGenerator(null);
       return;
     }
-    if (next < gen.currentValue) {
+    if (compareExactInt(next, gen.currentValue) < 0) {
       const ok = window.confirm(
-        `Lower generator ${gen.name} from ${gen.currentValue.toLocaleString()} to ${next.toLocaleString()}? New rows may collide with existing values.`,
+        `Lower generator ${gen.name} from ${formatExactInt(gen.currentValue)} to ${formatExactInt(next)}? New rows may collide with existing values.`,
       );
       if (!ok) {
         setEditingGenerator(null);
@@ -469,9 +462,7 @@ export function ObjectListPage({
     setError(null);
     try {
       const ident = quoteIdent(gen.name);
-      const major = engineVersion
-        ? parseInt(engineVersion.split('.')[0] ?? '0', 10)
-        : 0;
+      const major = engineVersion ? parseInt(engineVersion.split('.')[0] ?? '0', 10) : 0;
       const sql =
         major > 0 && major < 3
           ? `SET GENERATOR ${ident} TO ${next};`
@@ -504,9 +495,7 @@ export function ObjectListPage({
 
   const dropOne = async (name: string) => {
     if (busy) return;
-    const confirmed = window.confirm(
-      `Drop ${spec.singular} ${name}? This cannot be undone.`,
-    );
+    const confirmed = window.confirm(`Drop ${spec.singular} ${name}? This cannot be undone.`);
     if (!confirmed) return;
     setBusy(true);
     setError(null);
@@ -565,9 +554,7 @@ export function ObjectListPage({
           <h2 className="text-sm font-semibold text-fg">{spec.title}</h2>
           <span className="rounded bg-elevated px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide text-fg-subtle">
             {sorted.length.toLocaleString()}
-            {query && items.length !== sorted.length
-              ? ` / ${items.length.toLocaleString()}`
-              : ''}
+            {query && items.length !== sorted.length ? ` / ${items.length.toLocaleString()}` : ''}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -636,13 +623,10 @@ export function ObjectListPage({
                   <input
                     type="checkbox"
                     aria-label={`Select all ${spec.title.toLowerCase()}`}
-                    checked={
-                      selected.size > 0 && selected.size === sorted.length
-                    }
+                    checked={selected.size > 0 && selected.size === sorted.length}
                     ref={(el) => {
                       if (el) {
-                        el.indeterminate =
-                          selected.size > 0 && selected.size < sorted.length;
+                        el.indeterminate = selected.size > 0 && selected.size < sorted.length;
                       }
                     }}
                     onChange={toggleAll}
@@ -744,9 +728,7 @@ export function ObjectListPage({
                         </td>
                       );
                     })}
-                    <td
-                      className={`${actionColWidth(kind)} px-3 py-1.5 text-right`}
-                    >
+                    <td className={`${actionColWidth(kind)} px-3 py-1.5 text-right`}>
                       <div className="inline-flex items-center gap-1">
                         {(() => {
                           const dk = ddlKind(kind);
@@ -772,11 +754,7 @@ export function ObjectListPage({
                                 type="button"
                                 onClick={() => void toggleTrigger(trigger)}
                                 disabled={busy}
-                                title={
-                                  trigger.active
-                                    ? 'Deactivate trigger'
-                                    : 'Activate trigger'
-                                }
+                                title={trigger.active ? 'Deactivate trigger' : 'Activate trigger'}
                                 className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide transition-colors disabled:opacity-50 ${
                                   trigger.active
                                     ? 'text-success hover:bg-elevated'
@@ -791,8 +769,7 @@ export function ObjectListPage({
                         {kind === 'generators' &&
                           (() => {
                             const gen = row as GeneratorInfo;
-                            const isEditing =
-                              editingGenerator?.name === gen.name;
+                            const isEditing = editingGenerator?.name === gen.name;
                             return isEditing ? (
                               <button
                                 type="button"

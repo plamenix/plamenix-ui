@@ -21,13 +21,13 @@ const COLUMNS: ColumnDescription[] = [
 const ROWS: Row[] = [
   {
     cells: [
-      { type: 'integer', value: 1 },
+      { type: 'integer', value: '1' },
       { type: 'text', value: 'Alice' },
     ],
   },
   {
     cells: [
-      { type: 'integer', value: 2 },
+      { type: 'integer', value: '2' },
       { type: 'null' },
     ],
   },

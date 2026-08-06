@@ -144,7 +144,7 @@ describe('@plamenix/plugin-json-cell-renderer (I4.9 tri-state validator)', () =>
 
   it('does NOT claim non-text cell types (predicate guards by cell.type first)', () => {
     const ctx: CellRendererContext = {
-      cell: { type: 'integer', value: 42 },
+      cell: { type: 'integer', value: '42' },
       columnName: 'count',
       columnInfo: null,
       rowIndex: 0,

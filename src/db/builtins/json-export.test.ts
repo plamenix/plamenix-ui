@@ -22,14 +22,14 @@ const COLUMNS: ColumnDescription[] = [
 const ROWS: Row[] = [
   {
     cells: [
-      { type: 'integer', value: 1 },
+      { type: 'integer', value: '1' },
       { type: 'text', value: 'Alice' },
       { type: 'null' },
     ],
   },
   {
     cells: [
-      { type: 'integer', value: 2 },
+      { type: 'integer', value: '2' },
       { type: 'text', value: 'Bob "the Builder"' },
       { type: 'text', value: 'bob@example.com' },
     ],
@@ -71,8 +71,8 @@ describe('builtin JSON export (I4.3)', () => {
     expect(result.filename).toMatch(/^plamenix-result-\d{8}-\d{6}\.json$/);
     const parsed = JSON.parse(result.body as string);
     expect(parsed).toEqual([
-      { ID: 1, NAME: 'Alice', EMAIL: null },
-      { ID: 2, NAME: 'Bob "the Builder"', EMAIL: 'bob@example.com' },
+      { ID: '1', NAME: 'Alice', EMAIL: null },
+      { ID: '2', NAME: 'Bob "the Builder"', EMAIL: 'bob@example.com' },
     ]);
   });
 
@@ -80,7 +80,9 @@ describe('builtin JSON export (I4.3)', () => {
     const body = buildJsonBody(args());
     // First indent under array open is 2 spaces; first key is `"ID"`.
     expect(body.split('\n')[1]).toBe('  {');
-    expect(body.split('\n')[2]).toBe('    "ID": 1,');
+    // Integers are quoted: see cellToJson — a BIGINT cannot survive a
+    // JSON number, so the projection keeps them uniformly as text.
+    expect(body.split('\n')[2]).toBe('    "ID": "1",');
   });
 
   it('renders every ColumnValue type with the expected JSON projection', () => {
@@ -95,7 +97,7 @@ describe('builtin JSON export (I4.3)', () => {
       {
         cells: [
           { type: 'null' },
-          { type: 'integer', value: 42 },
+          { type: 'integer', value: '42' },
           { type: 'float', value: 3.14 },
           { type: 'bool', value: false },
           {
@@ -109,7 +111,7 @@ describe('builtin JSON export (I4.3)', () => {
     expect(parsed).toEqual([
       {
         A: null,
-        B: 42,
+        B: '42',
         C: 3.14,
         D: false,
         E: 'BLOB(9 bytes, peek=0xcafef00d)',
