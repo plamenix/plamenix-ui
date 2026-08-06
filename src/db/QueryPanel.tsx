@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   BarChart3,
   CircleAlert,
@@ -94,6 +95,11 @@ export interface QueryPanelProps {
   cryptState?: CryptState | null;
   /** Schema feed for SQL editor identifier completion. */
   schema?: Schema | null;
+  /** Transaction controls for this session, rendered at the left of the
+   *  action cluster. A slot rather than a prop bundle: the host owns the
+   *  session and performs the commit, so it supplies a configured
+   *  `TransactionBar`. Omit to hide transaction controls entirely. */
+  transactionBar?: ReactNode;
   /** Persisted bookmark slots for this tab (passed straight through to
    *  the SQL editor). */
   bookmarks?: BookmarkMap | undefined;
@@ -153,6 +159,7 @@ export function QueryPanel({
   busy,
   cryptState,
   schema = null,
+  transactionBar,
   bookmarks,
   onSqlChange,
   onExecute,
@@ -216,6 +223,7 @@ export function QueryPanel({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {transactionBar}
           {/* I5.3 — plugin-contributed tab-toolbar buttons sit ahead
               of the shell-owned action cluster. Each button receives
               the live {sessionId, busy} ctx through its `when` + `run`
