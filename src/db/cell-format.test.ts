@@ -71,3 +71,26 @@ describe('non-integer cells are unaffected', () => {
     expect(cellToSqlLiteral(blob)).toContain('NULL');
   });
 });
+
+describe('exact fixed-point values survive every export format', () => {
+  // NUMERIC(18,4) money value whose scaled integer is past 2^53, so the
+  // upstream driver's f64 path could not represent it.
+  const money: ColumnValue = { type: 'decimal', value: '99999999999999.9999' };
+
+  it('csv, copy-cell and xml keep every digit', () => {
+    expect(cellToCsv(money, ',')).toBe('99999999999999.9999');
+    expect(cellToPlainText(money)).toBe('99999999999999.9999');
+  });
+
+  it('sql literal stays a bare number so a re-import parses it as one', () => {
+    expect(cellToSqlLiteral(money)).toBe('99999999999999.9999');
+  });
+
+  it('json keeps it as text for the same reason integers are text', () => {
+    expect(cellToJson(money)).toBe('99999999999999.9999');
+  });
+
+  it('negative sub-unit values keep their sign', () => {
+    expect(cellToCsv({ type: 'decimal', value: '-0.0005' }, ',')).toBe('-0.0005');
+  });
+});

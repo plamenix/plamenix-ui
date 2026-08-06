@@ -43,6 +43,7 @@ export function cellToCsv(cell: ColumnValue | undefined, delimiter: string): str
     case 'text':
       return quoteCsvField(cell.value, delimiter);
     case 'integer':
+    case 'decimal':
     case 'float':
       return String(cell.value);
     case 'bool':
@@ -69,6 +70,7 @@ export function cellToPlainText(cell: ColumnValue | undefined): string {
     case 'text':
       return cell.value;
     case 'integer':
+    case 'decimal':
       return String(cell.value);
     case 'float':
       return cell.value === null ? '' : String(cell.value);
@@ -106,6 +108,9 @@ export function cellToSqlLiteral(cell: ColumnValue | undefined): string {
     case 'text':
       return `'${cell.value.replace(/'/g, "''")}'`;
     case 'integer':
+    // Bare numeric literal: quoting would make Firebird re-parse the
+    // exact decimal as a string on import.
+    case 'decimal':
       return String(cell.value);
     case 'float':
       return cell.value === null ? 'NULL' : String(cell.value);

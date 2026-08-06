@@ -177,6 +177,7 @@ export function renderCell(cell: ColumnValue): string {
     case 'text':
       return cell.value;
     case 'integer':
+    case 'decimal':
       return String(cell.value);
     case 'float':
       return cell.value === null ? 'NULL' : String(cell.value);

@@ -290,6 +290,24 @@ export function parseEditedValue(draft: string, column: ColumnInfo): ParsedValue
     }
     return { ok: true, value: { type: 'integer', value: exact }, literal: exact };
   }
+  if (isFixedPointType(sqlType)) {
+    // NUMERIC/DECIMAL are exact. Keep the user's digits rather than
+    // round-tripping through Number, which would put a rounded literal
+    // into the UPDATE for anything past a double's precision. No
+    // exponent form: Firebird stores these as a scaled integer.
+    if (!/^-?\d+(\.\d+)?$/.test(trimmed)) {
+      return {
+        ok: false,
+        reason: `Fixed-point column expects a plain decimal; got "${draft}".`,
+      };
+    }
+    const normalised = trimmed.startsWith('.') ? `0${trimmed}` : trimmed;
+    return {
+      ok: true,
+      value: { type: 'decimal', value: normalised },
+      literal: normalised,
+    };
+  }
   if (isFloatType(sqlType)) {
     if (!/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(trimmed)) {
       return {
@@ -322,6 +340,9 @@ export function cellToLiteral(cell: ColumnValue): string {
     case 'text':
       return quoteString(cell.value);
     case 'integer':
+    // Bare numeric literal. Both arrive as exact decimal text, so this
+    // reproduces the stored value rather than a rounded double.
+    case 'decimal':
       return String(cell.value);
     case 'float':
       return cell.value === null ? 'NULL' : String(cell.value);
@@ -467,6 +488,19 @@ export function isIntegerType(sqlType: string): boolean {
   }
   if (sqlType.startsWith('NUMERIC') || sqlType.startsWith('DECIMAL')) {
     return !sqlType.includes(',');
+  }
+  return false;
+}
+
+/** `true` for exact fixed-point columns — scaled `NUMERIC` and
+ *  `DECIMAL`. Firebird stores these as a scaled integer, so they hold
+ *  their digits exactly and must not be routed through a JS number.
+ *
+ *  Checked before {@link isFloatType}, which also matches them for the
+ *  sake of callers that only care whether a fractional part exists. */
+export function isFixedPointType(sqlType: string): boolean {
+  if (sqlType.startsWith('NUMERIC') || sqlType.startsWith('DECIMAL')) {
+    return sqlType.includes(',');
   }
   return false;
 }

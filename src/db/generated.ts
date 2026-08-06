@@ -95,7 +95,21 @@ export type ColumnValue =
  *  [`plamenix_types::exact_int`].
  */
 { type: "integer"; value: string } | 
-/**  Double-precision floating point (FLOAT, DOUBLE PRECISION). */
+/**
+ *  Exact fixed-point value (NUMERIC, DECIMAL).
+ * 
+ *  Carried as decimal text because neither `f64` nor a JSON number
+ *  can hold it: Firebird stores these as a scaled 64-bit integer,
+ *  and NUMERIC(18,4) — the usual money type — runs past what a
+ *  double represents exactly.
+ */
+{ type: "decimal"; value: string } | 
+/**
+ *  Double-precision floating point (FLOAT, DOUBLE PRECISION).
+ * 
+ *  Genuinely approximate, unlike [`Self::Decimal`]: `f64` is the
+ *  faithful representation of what Firebird stores.
+ */
 { type: "float"; value: number | null } | 
 /**  Boolean (FB 3.0+ `BOOLEAN`). */
 { type: "bool"; value: boolean } | 

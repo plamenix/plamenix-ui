@@ -83,12 +83,7 @@ import {
   type FilterOperator,
 } from './filters';
 import { FilterBuilderModal } from './FilterBuilderModal';
-import {
-  PAGE_SIZE_OPTIONS,
-  nextOrderBy,
-  type OrderBy,
-  type Pagination,
-} from './pagination';
+import { PAGE_SIZE_OPTIONS, nextOrderBy, type OrderBy, type Pagination } from './pagination';
 import {
   buildAllRowsDeleteSql,
   buildAllRowsUpdateSql,
@@ -197,7 +192,9 @@ const DEFAULT_COL_WIDTH = 160;
 const MIN_COL_WIDTH = 40;
 
 function isNumeric(cell: ColumnValue): boolean {
-  return cell.type === 'integer' || cell.type === 'float';
+  // `decimal` counts: NUMERIC/DECIMAL are numbers carried as exact text,
+  // so they right-align and format like the other numeric kinds.
+  return cell.type === 'integer' || cell.type === 'decimal' || cell.type === 'float';
 }
 
 /** String form used to seed the inline editor when a cell is opened.
@@ -225,6 +222,7 @@ function cellToDraft(cell: ColumnValue, column: ColumnInfo | null): string {
       return cell.value;
     }
     case 'integer':
+    case 'decimal':
     case 'float':
       return String(cell.value);
     case 'bool':
@@ -486,22 +484,19 @@ function CellContent({ cell, ctx }: { cell: ColumnValue; ctx: CellContext }) {
   switch (cell.type) {
     case 'null':
       return (
-        <span className="italic text-fg-subtle">
-          {nullDisplay === '' ? ' ' : nullDisplay}
-        </span>
+        <span className="italic text-fg-subtle">{nullDisplay === '' ? ' ' : nullDisplay}</span>
       );
     case 'text':
       return <>{formatDateCell(cell.value, dateFormat)}</>;
     case 'integer':
+    case 'decimal':
     case 'float':
       return <span className="tabular-nums">{cell.value}</span>;
     case 'bool':
       return (
         <span
           className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-            cell.value
-              ? 'bg-success-subtle text-success'
-              : 'bg-danger-subtle text-danger'
+            cell.value ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'
           }`}
         >
           {cell.value ? 'true' : 'false'}
@@ -546,8 +541,7 @@ function CellCopyButton({
   flash: { rowIdx: number; colIdx: number } | null;
   onCopy: (rowIdx: number, colIdx: number, cell: ColumnValue) => void;
 }) {
-  const isFlashed =
-    flash !== null && flash.rowIdx === rowIdx && flash.colIdx === colIdx;
+  const isFlashed = flash !== null && flash.rowIdx === rowIdx && flash.colIdx === colIdx;
   const titleBase =
     cell.type === 'blob'
       ? 'Copy hex preview (open BLOB viewer for full body)'
@@ -565,11 +559,7 @@ function CellCopyButton({
       aria-label={titleBase}
       className="flex h-4 w-4 items-center justify-center rounded text-fg-subtle opacity-0 transition-opacity hover:bg-elevated hover:text-fg group-hover/cell:opacity-100"
     >
-      {isFlashed ? (
-        <Check className="h-3 w-3 text-success" />
-      ) : (
-        <Copy className="h-3 w-3" />
-      )}
+      {isFlashed ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
     </button>
   );
 }
@@ -597,8 +587,7 @@ function RowCopyToolbar({
     <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100">
       {entries.map((e) => {
         const Icon = e.icon;
-        const isFlashed =
-          flash !== null && flash.rowIdx === rowIdx && flash.kind === e.kind;
+        const isFlashed = flash !== null && flash.rowIdx === rowIdx && flash.kind === e.kind;
         return (
           <button
             key={e.kind}
@@ -608,11 +597,7 @@ function RowCopyToolbar({
             aria-label={e.title}
             className="flex h-5 w-5 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-elevated hover:text-fg"
           >
-            {isFlashed ? (
-              <Check className="h-3 w-3 text-success" />
-            ) : (
-              <Icon className="h-3 w-3" />
-            )}
+            {isFlashed ? <Check className="h-3 w-3 text-success" /> : <Icon className="h-3 w-3" />}
           </button>
         );
       })}
@@ -659,8 +644,8 @@ export function ResultTable({
           <CheckCircle2 className="h-4 w-4 text-success" />
         </div>
         <div className="text-sm text-fg-muted">
-          <span className="font-mono font-semibold text-fg">{n.toLocaleString()}</span>{' '}
-          row{n === 1 ? '' : 's'} affected
+          <span className="font-mono font-semibold text-fg">{n.toLocaleString()}</span> row
+          {n === 1 ? '' : 's'} affected
         </div>
       </div>
     );
@@ -820,12 +805,8 @@ function toSql(
   includeDdl: boolean,
 ): string {
   const tableName = editable?.table.name ?? '<TABLE>';
-  const ident = editable
-    ? quoteIdentForExport(editable.table.name)
-    : '<TABLE>';
-  const colList = columns
-    .map((c) => quoteIdentForExport(c.name))
-    .join(', ');
+  const ident = editable ? quoteIdentForExport(editable.table.name) : '<TABLE>';
+  const colList = columns.map((c) => quoteIdentForExport(c.name)).join(', ');
   const out: string[] = [];
   if (editable && includeDdl) {
     out.push(`-- DDL`);
@@ -839,18 +820,14 @@ function toSql(
     const pk = editable.table.primaryKey ?? [];
     if (pk.length > 0) {
       out[out.length - 1] += ',';
-      out.push(
-        `    PRIMARY KEY (${pk.map(quoteIdentForExport).join(', ')})`,
-      );
+      out.push(`    PRIMARY KEY (${pk.map(quoteIdentForExport).join(', ')})`);
     }
     out.push(`);`);
     out.push(``);
   }
   out.push(`-- Data for ${tableName}`);
   for (const row of rows) {
-    const values = columns
-      .map((_, i) => cellToSqlLiteral(row.cells[i]))
-      .join(', ');
+    const values = columns.map((_, i) => cellToSqlLiteral(row.cells[i])).join(', ');
     out.push(`INSERT INTO ${ident} (${colList}) VALUES (${values});`);
   }
   return out.join('\n') + '\n';
@@ -879,9 +856,7 @@ function toXml(columns: RowsArg, rows: RowArg): string {
       const cell = row.cells[i];
       const nullAttr = !cell || cell.type === 'null' ? ' null="true"' : '';
       const text = cell && cell.type !== 'null' ? escapeXml(cellToXmlText(cell)) : '';
-      lines.push(
-        `    <col name="${escapeXml(c.name)}"${nullAttr}>${text}</col>`,
-      );
+      lines.push(`    <col name="${escapeXml(c.name)}"${nullAttr}>${text}</col>`);
     });
     lines.push('  </row>');
   }
@@ -898,15 +873,10 @@ function downloadXml(columns: RowsArg, rows: RowArg): void {
  *  the bundle when the user actually clicks the button. */
 async function downloadXlsx(columns: RowsArg, rows: RowArg): Promise<void> {
   const mod = (await import('write-excel-file/browser')) as unknown as {
-    default: (
-      data: XlsxCell[][],
-      opts: { fileName: string },
-    ) => Promise<unknown>;
+    default: (data: XlsxCell[][], opts: { fileName: string }) => Promise<unknown>;
   };
   const header: XlsxCell[] = columns.map((c) => ({ value: c.name }));
-  const body: XlsxCell[][] = rows.map((r) =>
-    columns.map((_, i) => cellToXlsx(r.cells[i])),
-  );
+  const body: XlsxCell[][] = rows.map((r) => columns.map((_, i) => cellToXlsx(r.cells[i])));
   await mod.default([header, ...body], {
     fileName: timestampFilename('xlsx'),
   });
@@ -959,9 +929,7 @@ function compileWildcardFilter(pattern: string): RegExp | null {
   // 2. Promote escaped `\*` (which is what step 1 just produced for
   //    user `*`) back to `.*` so it acts as the "anything" wildcard
   //    users expect.
-  const escaped = trimmed
-    .replace(/[.+?^${}()|[\]\\*]/g, '\\$&')
-    .replace(/\\\*/g, '.*');
+  const escaped = trimmed.replace(/[.+?^${}()|[\]\\*]/g, '\\$&').replace(/\\\*/g, '.*');
   try {
     return new RegExp(escaped, 'i');
   } catch {
@@ -997,7 +965,9 @@ function VirtualRows({
   const exportIncludeDdl = useDisplayStore((s) => s.exportIncludeDdl);
   const setExportIncludeDdl = useDisplayStore((s) => s.setExportIncludeDdl);
   const [copyFlash, setCopyFlash] = useState<{ rowIdx: number; kind: RowCopyKind } | null>(null);
-  const [cellCopyFlash, setCellCopyFlash] = useState<{ rowIdx: number; colIdx: number } | null>(null);
+  const [cellCopyFlash, setCellCopyFlash] = useState<{ rowIdx: number; colIdx: number } | null>(
+    null,
+  );
   const [wildcardOpen, setWildcardOpen] = useState(false);
   const [wildcardFilter, setWildcardFilter] = useState('');
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -1021,9 +991,7 @@ function VirtualRows({
       case 'sql': {
         const cols = columns.map((c) => quoteIdentForExport(c.name)).join(', ');
         const values = cells.map((c) => cellToSqlLiteral(c)).join(', ');
-        const ident = editable
-          ? quoteIdentForExport(editable.table.name)
-          : '<TABLE>';
+        const ident = editable ? quoteIdentForExport(editable.table.name) : '<TABLE>';
         return `INSERT INTO ${ident} (${cols}) VALUES (${values});`;
       }
       case 'json': {
@@ -1045,15 +1013,13 @@ function VirtualRows({
     void navigator.clipboard.writeText(text).catch(() => {});
     setCopyFlash({ rowIdx, kind });
     window.setTimeout(() => {
-      setCopyFlash((prev) =>
-        prev && prev.rowIdx === rowIdx && prev.kind === kind ? null : prev,
-      );
+      setCopyFlash((prev) => (prev && prev.rowIdx === rowIdx && prev.kind === kind ? null : prev));
     }, 1200);
   };
 
-  const [localWidths, setLocalWidths] = useState<ColumnSizingState>(
-    () => ({ ...(columnWidths ?? {}) }),
-  );
+  const [localWidths, setLocalWidths] = useState<ColumnSizingState>(() => ({
+    ...(columnWidths ?? {}),
+  }));
 
   useEffect(() => {
     setLocalWidths({ ...(columnWidths ?? {}) });
@@ -1079,9 +1045,7 @@ function VirtualRows({
   // array — every downstream cell-state / selection / edit-buffer
   // helper keys by that original index, so `tableRow.index` (which
   // would point into `filteredRows`) cannot be used directly.
-  const filteredRowsWithIndex = useMemo<
-    Array<{ row: TableRow; originalIndex: number }>
-  >(() => {
+  const filteredRowsWithIndex = useMemo<Array<{ row: TableRow; originalIndex: number }>>(() => {
     if (!wildcardRe) {
       return rows.map((row, i) => ({ row, originalIndex: i }));
     }
@@ -1109,8 +1073,7 @@ function VirtualRows({
       columnSizing: localWidths,
     },
     onColumnSizingChange: (updater) => {
-      const next =
-        typeof updater === 'function' ? updater(localWidths) : updater;
+      const next = typeof updater === 'function' ? updater(localWidths) : updater;
       setLocalWidths(next);
       onColumnWidthsChange?.(next);
     },
@@ -1138,30 +1101,20 @@ function VirtualRows({
     return cell ? isNumeric(cell) : false;
   });
 
-  const [openBlob, setOpenBlob] = useState<
-    | {
-        id: string;
-        label: string;
-        hex: string | null;
-        error: string | null;
-        /** Row + column where this BLOB lives. Used by the editor to
-         *  build the UPDATE round-trip. `null` when the table is not
-         *  editable, which suppresses the Edit button. */
-        target: { rowIdx: number; colIdx: number } | null;
-      }
-    | null
-  >(null);
+  const [openBlob, setOpenBlob] = useState<{
+    id: string;
+    label: string;
+    hex: string | null;
+    error: string | null;
+    /** Row + column where this BLOB lives. Used by the editor to
+     *  build the UPDATE round-trip. `null` when the table is not
+     *  editable, which suppresses the Edit button. */
+    target: { rowIdx: number; colIdx: number } | null;
+  } | null>(null);
 
-  const openBlobViewer = (
-    ref: BlobRef,
-    label: string,
-    rowIdx: number,
-    colIdx: number,
-  ) => {
+  const openBlobViewer = (ref: BlobRef, label: string, rowIdx: number, colIdx: number) => {
     const target =
-      editable && onCommit && editable.pkColIndices.length > 0
-        ? { rowIdx, colIdx }
-        : null;
+      editable && onCommit && editable.pkColIndices.length > 0 ? { rowIdx, colIdx } : null;
     setOpenBlob({ id: ref.id, label, hex: null, error: null, target });
     if (!onFetchBlob) {
       setOpenBlob({
@@ -1231,9 +1184,7 @@ function VirtualRows({
   // without a remount. Hardcoded entries that share a local id with a
   // registered contribution get filtered out in the IIFE below
   // (dedup-by-id, see `registeredLocalIds`).
-  const exportContributions = usePluginContributions<ExportFormatPayload>(
-    'export_formats',
-  );
+  const exportContributions = usePluginContributions<ExportFormatPayload>('export_formats');
 
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [cellStates, setCellStates] = useState<Map<string, CellState>>(new Map());
@@ -1397,9 +1348,7 @@ function VirtualRows({
 
   const toggleAll = () => {
     setSelectedRows((prev) => {
-      const selectable = rows
-        .map((_, i) => i)
-        .filter((i) => !deletedRows.has(i));
+      const selectable = rows.map((_, i) => i).filter((i) => !deletedRows.has(i));
       if (prev.size === selectable.length) return new Set();
       return new Set(selectable);
     });
@@ -1410,9 +1359,10 @@ function VirtualRows({
   /** Builds the PK literal payload for the currently-selected rows.
    *  Returns `null` when any selected row is missing a PK cell — the
    *  caller surfaces this through `setBulkError`. */
-  const buildPkPayload = ():
-    | { rows: { idx: number; literals: string[] }[]; pkColumns: string[] }
-    | null => {
+  const buildPkPayload = (): {
+    rows: { idx: number; literals: string[] }[];
+    pkColumns: string[];
+  } | null => {
     if (!editable) return null;
     const pkColumns = editable.pkColIndices
       .map((i) => editable.columnInfoByIndex[i]?.name)
@@ -1446,9 +1396,7 @@ function VirtualRows({
       const detail = predicate
         ? `matching the active filter in ${editable.table.name}`
         : `in ${editable.table.name}`;
-      const confirmed = window.confirm(
-        `Delete ${scope} ${detail}? This cannot be undone.`,
-      );
+      const confirmed = window.confirm(`Delete ${scope} ${detail}? This cannot be undone.`);
       if (!confirmed) return;
       const builtSql = buildAllRowsDeleteSql({
         table: editable.table.name,
@@ -1466,8 +1414,7 @@ function VirtualRows({
         setBulkError(decision.reason);
         return;
       }
-      const sql =
-        decision.action === 'replace' ? decision.ctx.sql : builtSql;
+      const sql = decision.action === 'replace' ? decision.ctx.sql : builtSql;
       setBulkBusy(true);
       setBulkError(null);
       try {
@@ -1516,8 +1463,7 @@ function VirtualRows({
       setBulkError(decision.reason);
       return;
     }
-    const sql =
-      decision.action === 'replace' ? decision.ctx.sql : builtSql;
+    const sql = decision.action === 'replace' ? decision.ctx.sql : builtSql;
     setBulkBusy(true);
     setBulkError(null);
     try {
@@ -1575,9 +1521,7 @@ function VirtualRows({
         await onCommit(sql);
         // Apply optimistic override to every loaded row that
         // matches the column.
-        const colIdx = editable.columnInfoByIndex.findIndex(
-          (c) => c?.name === column.name,
-        );
+        const colIdx = editable.columnInfoByIndex.findIndex((c) => c?.name === column.name);
         if (colIdx >= 0) {
           const defaultApplied = parsed.literal === 'DEFAULT';
           setCellStates((prev) => {
@@ -1618,9 +1562,7 @@ function VirtualRows({
     setBulkError(null);
     try {
       await onCommit(sql);
-      const colIdx = editable.columnInfoByIndex.findIndex(
-        (c) => c?.name === column.name,
-      );
+      const colIdx = editable.columnInfoByIndex.findIndex((c) => c?.name === column.name);
       if (colIdx >= 0) {
         const defaultApplied = parsed.literal === 'DEFAULT';
         setCellStates((prev) => {
@@ -1700,8 +1642,7 @@ function VirtualRows({
       setEditing(null);
       return;
     }
-    const sql =
-      decision.action === 'replace' ? decision.ctx.sql : builtSql;
+    const sql = decision.action === 'replace' ? decision.ctx.sql : builtSql;
     setEditing(null);
     patchCellState(key, { saving: true, error: undefined });
     try {
@@ -1730,22 +1671,18 @@ function VirtualRows({
   };
 
   return (
-    <div
-      className={`overflow-hidden bg-panel ${embedded ? '' : 'rounded-lg border border-edge'}`}
-    >
+    <div className={`overflow-hidden bg-panel ${embedded ? '' : 'rounded-lg border border-edge'}`}>
       <div className="flex items-center justify-between border-b border-edge bg-panel px-3 py-2">
         <div className="flex items-center gap-2 text-xs text-fg-muted">
           <Database className="h-3.5 w-3.5 text-fg-subtle" />
           <span>
-            <span className="font-mono font-semibold text-fg">
-              {rows.length.toLocaleString()}
-            </span>{' '}
+            <span className="font-mono font-semibold text-fg">{rows.length.toLocaleString()}</span>{' '}
             row{rows.length === 1 ? '' : 's'}
           </span>
           <span className="text-fg-subtle">·</span>
           <span>
-            <span className="font-mono font-semibold text-fg">{columns.length}</span>{' '}
-            column{columns.length === 1 ? '' : 's'}
+            <span className="font-mono font-semibold text-fg">{columns.length}</span> column
+            {columns.length === 1 ? '' : 's'}
           </span>
           {truncated && (
             <span
@@ -1864,8 +1801,7 @@ function VirtualRows({
                       ? dbScopeCount.toLocaleString()
                       : '?'}{' '}
                   rows
-                  {filters && filters.length > 0 ? ' (filtered)' : ''} in{' '}
-                  {editable?.table.name}
+                  {filters && filters.length > 0 ? ' (filtered)' : ''} in {editable?.table.name}
                 </span>
                 <button
                   type="button"
@@ -1913,23 +1849,19 @@ function VirtualRows({
                 <span className="rounded bg-accent-subtle px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide text-accent">
                   {selectedRows.size} selected
                 </span>
-                {dbScopeAvailable &&
-                  selectedRows.size ===
-                    rows.length - deletedRows.size && (
-                    <button
-                      type="button"
-                      onClick={enterDbScope}
-                      disabled={bulkBusy}
-                      title={`Select every row${
-                        filters && filters.length > 0
-                          ? ' matching the active filter'
-                          : ''
-                      } in ${editable?.table.name ?? 'the table'}`}
-                      className="inline-flex items-center gap-1 rounded-md border border-accent/40 bg-accent-subtle/60 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-accent transition-colors hover:bg-accent-subtle"
-                    >
-                      Select all in {editable?.table.name}
-                    </button>
-                  )}
+                {dbScopeAvailable && selectedRows.size === rows.length - deletedRows.size && (
+                  <button
+                    type="button"
+                    onClick={enterDbScope}
+                    disabled={bulkBusy}
+                    title={`Select every row${
+                      filters && filters.length > 0 ? ' matching the active filter' : ''
+                    } in ${editable?.table.name ?? 'the table'}`}
+                    className="inline-flex items-center gap-1 rounded-md border border-accent/40 bg-accent-subtle/60 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-accent transition-colors hover:bg-accent-subtle"
+                  >
+                    Select all in {editable?.table.name}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleBulkDelete}
@@ -1970,12 +1902,7 @@ function VirtualRows({
               </>
             )}
             {(() => {
-              const scope = exportScope(
-                dbScopeActive,
-                dbScopeCount,
-                selectedRows,
-                rows.length,
-              );
+              const scope = exportScope(dbScopeActive, dbScopeCount, selectedRows, rows.length);
               const handleExport = async (kind: ExportFormat) => {
                 if (exportBusy) return;
                 setExportBusy(true);
@@ -2008,9 +1935,7 @@ function VirtualRows({
                       break;
                   }
                 } catch (err) {
-                  setExportError(
-                    err instanceof Error ? err.message : String(err),
-                  );
+                  setExportError(err instanceof Error ? err.message : String(err));
                 } finally {
                   setExportBusy(false);
                 }
@@ -2087,9 +2012,7 @@ function VirtualRows({
               // Until I4.3-I4.6 extract the remaining four formats, the
               // hardcoded JSON / SQL / XML / XLSX entries continue to
               // serve as the implementation (safety-net pattern from I4.1).
-              const registeredLocalIds = new Set(
-                exportContributions.map((c) => c.contribution.id),
-              );
+              const registeredLocalIds = new Set(exportContributions.map((c) => c.contribution.id));
               for (const id of registeredLocalIds) {
                 const idx = definitions.findIndex((d) => d.id === id);
                 if (idx >= 0) definitions.splice(idx, 1);
@@ -2133,9 +2056,7 @@ function VirtualRows({
                   a.remove();
                   URL.revokeObjectURL(url);
                 } catch (err) {
-                  setExportError(
-                    err instanceof Error ? err.message : String(err),
-                  );
+                  setExportError(err instanceof Error ? err.message : String(err));
                 } finally {
                   setExportBusy(false);
                 }
@@ -2160,8 +2081,7 @@ function VirtualRows({
               // action. Order of the rest is preserved.
               definitions.sort(
                 (a, b) =>
-                  Number(b.id === defaultExportFormat) -
-                  Number(a.id === defaultExportFormat),
+                  Number(b.id === defaultExportFormat) - Number(a.id === defaultExportFormat),
               );
               const disabled = exportBusy || (dbScopeActive && !onFetchScopedRows);
               const primary = definitions[0];
@@ -2278,7 +2198,7 @@ function VirtualRows({
         </div>
       )}
 
-      {(
+      {
         <div
           ref={parentRef}
           className="overflow-auto bg-canvas"
@@ -2321,11 +2241,7 @@ function VirtualRows({
                   return (
                     <th
                       key={header.id}
-                      style={
-                        width
-                          ? { width, minWidth: width, maxWidth: width }
-                          : undefined
-                      }
+                      style={width ? { width, minWidth: width, maxWidth: width } : undefined}
                       className={`relative whitespace-nowrap px-3 py-2 font-mono font-semibold ${
                         columnIsNumeric[i] ? 'text-right' : 'text-left'
                       }`}
@@ -2341,10 +2257,7 @@ function VirtualRows({
                         }`}
                       >
                         {pkSet.has(i) && (
-                          <KeyRound
-                            className="h-3 w-3 text-accent"
-                            aria-label="Primary key"
-                          />
+                          <KeyRound className="h-3 w-3 text-accent" aria-label="Primary key" />
                         )}
                         {colName}
                         {sortActive && (
@@ -2365,15 +2278,10 @@ function VirtualRows({
                             }}
                             aria-label={`Filter ${colName}`}
                             className={`ml-1 inline-flex h-4 w-4 items-center justify-center rounded transition-colors hover:bg-elevated ${
-                              active
-                                ? 'text-accent'
-                                : 'text-fg-subtle opacity-60 hover:opacity-100'
+                              active ? 'text-accent' : 'text-fg-subtle opacity-60 hover:opacity-100'
                             }`}
                           >
-                            <Filter
-                              className="h-3 w-3"
-                              fill={active ? 'currentColor' : 'none'}
-                            />
+                            <Filter className="h-3 w-3" fill={active ? 'currentColor' : 'none'} />
                           </button>
                         )}
                       </span>
@@ -2412,10 +2320,7 @@ function VirtualRows({
                     </th>
                   );
                 })}
-                <th
-                  aria-hidden
-                  className="sticky right-0 z-20 w-8 bg-panel px-1 py-2"
-                />
+                <th aria-hidden className="sticky right-0 z-20 w-8 bg-panel px-1 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -2426,9 +2331,7 @@ function VirtualRows({
                       <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-elevated">
                         <Inbox className="h-6 w-6 text-fg-subtle" />
                       </div>
-                      <p className="mb-1 text-sm font-medium text-fg-muted">
-                        No rows returned
-                      </p>
+                      <p className="mb-1 text-sm font-medium text-fg-muted">No rows returned</p>
                       <p className="text-xs text-fg-subtle">
                         Query succeeded but matched zero rows.
                         {activeFilters.length > 0
@@ -2486,9 +2389,7 @@ function VirtualRows({
                       const cell = effectiveCell(rowIdx, j);
                       const cellEditable = isColumnEditable(j) && !rowDeleted;
                       const isEditing =
-                        editing !== null &&
-                        editing.rowIdx === rowIdx &&
-                        editing.colIdx === j;
+                        editing !== null && editing.rowIdx === rowIdx && editing.colIdx === j;
                       const cellWidth = localWidths[columnName];
                       return (
                         <td
@@ -2504,9 +2405,7 @@ function VirtualRows({
                                 }
                               : undefined
                           }
-                          onDoubleClick={
-                            cellEditable ? () => startEdit(rowIdx, j) : undefined
-                          }
+                          onDoubleClick={cellEditable ? () => startEdit(rowIdx, j) : undefined}
                           title={
                             state?.error
                               ? state.error
@@ -2526,11 +2425,7 @@ function VirtualRows({
                             <TypedEditingInput
                               draft={editing.draft}
                               column={editable?.columnInfoByIndex[j] ?? null}
-                              onDraft={(v) =>
-                                setEditing(
-                                  editing ? { ...editing, draft: v } : null,
-                                )
-                              }
+                              onDraft={(v) => setEditing(editing ? { ...editing, draft: v } : null)}
                               onCancel={cancelEdit}
                               onCommit={commitEdit}
                             />
@@ -2554,12 +2449,10 @@ function VirtualRows({
                                 cell={cell}
                                 ctx={{
                                   columnName,
-                                  columnInfo:
-                                    editable?.columnInfoByIndex[j] ?? null,
+                                  columnInfo: editable?.columnInfoByIndex[j] ?? null,
                                   rowIndex: rowIdx,
                                   colIndex: j,
-                                  onBlobClick: (ref, name) =>
-                                    openBlobViewer(ref, name, rowIdx, j),
+                                  onBlobClick: (ref, name) => openBlobViewer(ref, name, rowIdx, j),
                                 }}
                               />
                               <CellCopyButton
@@ -2589,11 +2482,7 @@ function VirtualRows({
                             : 'bg-[var(--color-row-alt)]'
                       } group-hover:bg-[var(--color-row-hover)]`}
                     >
-                      <RowCopyToolbar
-                        rowIdx={rowIdx}
-                        flash={copyFlash}
-                        onCopy={handleCopyRow}
-                      />
+                      <RowCopyToolbar rowIdx={rowIdx} flash={copyFlash} onCopy={handleCopyRow} />
                     </td>
                   </tr>
                 );
@@ -2606,7 +2495,7 @@ function VirtualRows({
             </tbody>
           </table>
         </div>
-      )}
+      }
       {/* end always-render table block */}
       {pagination && onPaginationChange && (
         <PaginationFooter
@@ -2673,9 +2562,7 @@ function VirtualRows({
           editable={editable}
           pkSet={pkSet}
           rowCount={
-            dbScopeActive
-              ? (dbScopeCount ?? rows.length - deletedRows.size)
-              : selectedRows.size
+            dbScopeActive ? (dbScopeCount ?? rows.length - deletedRows.size) : selectedRows.size
           }
           scopeLabel={
             dbScopeActive
@@ -2838,9 +2725,7 @@ function PaginationFooter({
           className="w-12 rounded border border-edge bg-canvas px-1 py-0.5 text-center font-mono text-fg focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
         {knownLastPage !== null && (
-          <span className="font-mono text-fg-subtle">
-            of {knownLastPage.toLocaleString()}
-          </span>
+          <span className="font-mono text-fg-subtle">of {knownLastPage.toLocaleString()}</span>
         )}
       </div>
     </div>
