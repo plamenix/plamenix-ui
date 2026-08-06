@@ -12,9 +12,8 @@
  * having to reinvent the registration shape.
  *
  * Plugin id namespacing: built-ins prefix their id with
- * `@plamenix-builtin/`. Plugins from the marketplace or sideloaded
- * use reverse-DNS (`dev.plamenix.hello`, `com.example.csv-export`,
- * etc.). The `isBuiltinPlugin(id)` discriminator lets consumers
+ * `@plamenix-builtin/`. Sideloaded plugins use reverse-DNS
+ * (`dev.plamenix.hello`, `com.example.csv-export`, etc.). The `isBuiltinPlugin(id)` discriminator lets consumers
  * (Permissions panel, uninstall flow, debug overlays) treat the two
  * differently — e.g. uninstall is disabled for built-ins, badge is
  * different in the plugin list — while contributions themselves
@@ -26,8 +25,8 @@ import type { PluginContributions } from './types.js';
 
 /**
  * Reserved id prefix for built-in (host-shipped) contributions.
- * Marketplace plugin id rules disallow this prefix so collisions
- * cannot happen.
+ * The manifest validator rejects this prefix on a sideloaded plugin,
+ * so a bundle cannot impersonate a built-in.
  */
 export const BUILTIN_NAMESPACE = '@plamenix-builtin/';
 

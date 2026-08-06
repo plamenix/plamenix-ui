@@ -488,11 +488,6 @@ export {
   type PluginSignatureState,
 } from './plugins/PluginInstallDialog';
 export {
-  PluginInstallFromUrlDialog,
-  isValidPluginUrl,
-  type PluginInstallFromUrlDialogProps,
-} from './plugins/PluginInstallFromUrlDialog';
-export {
   PluginUninstallConfirmation,
   formatStorageSize,
   type PendingPluginUninstall,

@@ -15,7 +15,7 @@
  * `dialect` filter.
  *
  * Dialect string: free-form for now (`'firebird'`, `'firebird/3'`,
- * `'pl-sql'`, `'tsql'`, `'all'`, ...). Marketplace-side curation will
+ * `'pl-sql'`, `'tsql'`, `'all'`, ...). Curation of that list will
  * eventually settle on a registry of recognised dialect ids; for M1
  * the built-in registers `dialect: 'firebird'` and the helper does
  * an equality match (with `'all'` matching everything).

@@ -157,7 +157,7 @@ describe('I9.11 — cross-cutting bundled-plugins smoke', () => {
     }
 
     // Every registered plugin id is built-in-namespaced — no leak of
-    // marketplace-style reverse-DNS ids through the boot path.
+    // sideloaded reverse-DNS ids through the boot path.
     const allRegisteredPluginIds = new Set<string>();
     for (const point of new Set(BUNDLED.map((b) => b.extensionPoint))) {
       for (const entry of registry.getContributions(point)) {

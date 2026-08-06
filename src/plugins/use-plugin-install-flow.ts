@@ -25,10 +25,14 @@
  * the `error` state where the host can render an inline message; the
  * next `pick()` clears it.
  *
- * The hook is generic over the **source** type so a desktop picker
- * can return a file path while a web fetch returns a URL + a Blob —
- * the validator and installer just consume whatever opaque blob the
- * picker hands back.
+ * The hook is generic over the **source** type because the two
+ * editions identify a chosen bundle differently: the desktop picker
+ * returns a file path, the web picker returns an uploaded Blob. The
+ * validator and installer just consume whatever the picker hands back.
+ *
+ * Both are local files the user selected deliberately. Plamenix does
+ * not fetch plugins from a URL or a registry — see the trust model in
+ * plamenix/docs/plugin-architecture.md.
  */
 
 import { useCallback, useState } from 'react';
@@ -54,9 +58,9 @@ export type PluginInstallState<TSource> =
 
 /** Adapter pack the host supplies. */
 export interface PluginInstallAdapters<TSource> {
-  /** Open the host's file/URL picker. Resolves with the source
-   *  identifier (a file path on desktop, a URL or Blob on web). Resolve
-   *  with `null` when the user cancels the picker. */
+  /** Open the host's file picker. Resolves with the source identifier
+   *  (a file path on desktop, an uploaded Blob on web), or `null` when
+   *  the user cancels. */
   pick: () => Promise<TSource | null>;
   /** Validate the picked source — extract the bundle's manifest +
    *  return the `PendingPluginInstall` shape for the install dialog.

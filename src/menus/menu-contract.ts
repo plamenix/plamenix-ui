@@ -26,7 +26,7 @@
  * predicate `(ctx) => boolean` against the discriminated context.
  * String-based DSLs (`'kind === "table" && target.primaryKey'`) need
  * a parser + sandboxed evaluator to be safe; deferred to I7's
- * marketplace manifest work where serialisable predicates matter.
+ * manifest-declared menu work where serialisable predicates matter.
  * Function predicates are loaded via the plugin's ui.mjs and execute
  * inside the host context — same trust model as `run` callbacks.
  */
