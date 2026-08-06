@@ -92,15 +92,13 @@ export interface TabState {
    *  `RoutineObjectView`; cleared when the user runs anything new in
    *  the editor or closes the view. Holds the kind, name, fetched
    *  source body, and loading / error chrome the view needs. */
-  focusedRoutine:
-    | {
-        kind: 'view' | 'procedure' | 'trigger' | 'generator' | 'domain';
-        name: string;
-        source: string | null;
-        loading: boolean;
-        error: string | null;
-      }
-    | null;
+  focusedRoutine: {
+    kind: 'view' | 'procedure' | 'trigger' | 'generator' | 'domain';
+    name: string;
+    source: string | null;
+    loading: boolean;
+    error: string | null;
+  } | null;
 }
 
 /** Tab-store actions. State mutation goes exclusively through these;
@@ -143,7 +141,7 @@ function freshTab(): TabState {
     schema: null,
     error: null,
     busy: false,
-    form: { ...DEFAULT_FORM, password: 'masterkey' },
+    form: { ...DEFAULT_FORM },
     selectedProfileId: null,
     profileName: '',
     profileColor: null,
@@ -185,10 +183,7 @@ interface PersistedTabsState {
 
 /** Strips secrets from a form before persistence. */
 function sanitiseForm(form: ConnectionForm): ConnectionForm {
-  // TEST-ONLY: persists `masterkey` instead of clearing so the connection
-  // form stays prefilled across reloads. REMOVE before deploy + restore
-  // the previous behaviour (`password: ''`, `encryptionKey: ''`).
-  return { ...form, password: 'masterkey', encryptionKey: '' };
+  return { ...form, password: '', encryptionKey: '' };
 }
 
 /** Rebuilds a live `TabState` from a persisted projection, resetting
@@ -211,9 +206,10 @@ function inflateTab(saved: PersistedTab): TabState {
     busy: false,
     // Merge against DEFAULT_FORM so older persisted shapes pick up
     // newer fields (e.g. `fbclientPath`) with controlled defaults.
-    // TEST-ONLY: ensure prefill survives even when the persisted form
-    // was saved before the sanitiser change above. Drop on deploy.
-    form: { ...DEFAULT_FORM, ...saved.form, password: 'masterkey' },
+    // Secrets are re-cleared after the merge: a build shipped between
+    // 2026-05 and 2026-08 persisted a literal password, so entries
+    // already in localStorage cannot be trusted to be sanitised.
+    form: { ...DEFAULT_FORM, ...saved.form, password: '', encryptionKey: '' },
     selectedProfileId: saved.selectedProfileId,
     profileName: saved.profileName,
     profileColor: saved.profileColor ?? null,
@@ -283,13 +279,7 @@ export const useTabsStore = create<TabsStore>()(
           })),
         reorderTab: (from, to) =>
           set((s) => {
-            if (
-              from === to ||
-              from < 0 ||
-              from >= s.tabs.length ||
-              to < 0 ||
-              to >= s.tabs.length
-            ) {
+            if (from === to || from < 0 || from >= s.tabs.length || to < 0 || to >= s.tabs.length) {
               return {};
             }
             const next = s.tabs.slice();
@@ -309,8 +299,7 @@ export const useTabsStore = create<TabsStore>()(
         // placeholder (`SELECT 42 AS answer, …`) baked into every
         // fresh tab. Drop it so already-persisted tabs land empty
         // for users coming from the test build.
-        const PRE_BETA_PLACEHOLDER =
-          "SELECT 42 AS answer, 'plamenix' AS name FROM RDB$DATABASE";
+        const PRE_BETA_PLACEHOLDER = "SELECT 42 AS answer, 'plamenix' AS name FROM RDB$DATABASE";
         if (fromVersion < 2 && persistedState && typeof persistedState === 'object') {
           const state = persistedState as PersistedTabsState;
           if (Array.isArray(state.tabs)) {
@@ -344,8 +333,7 @@ export const useTabsStore = create<TabsStore>()(
           return currentState;
         }
         const tabs = persisted.tabs.map(inflateTab);
-        const activeTabId =
-          tabs.find((t) => t.id === persisted.activeTabId)?.id ?? tabs[0]!.id;
+        const activeTabId = tabs.find((t) => t.id === persisted.activeTabId)?.id ?? tabs[0]!.id;
         return { ...currentState, tabs, activeTabId };
       },
     },
