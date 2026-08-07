@@ -388,6 +388,17 @@ export function buildPrimaryKeyWhere(args: {
   if (args.rows.length === 0) {
     throw new Error('buildPrimaryKeyWhere needs at least one row.');
   }
+  if (args.pkColumns.length === 0) {
+    // Without this the composite branch below maps over an empty
+    // column list, producing `()` per row and a predicate of
+    // `() OR ()`. That is invalid SQL, so nothing is deleted — but the
+    // user is told their statement has a syntax error when the real
+    // problem is that the table has no primary key and its rows cannot
+    // be identified individually at all.
+    throw new Error(
+      'buildPrimaryKeyWhere needs at least one key column; a table with no primary key cannot have individual rows targeted.',
+    );
+  }
   if (args.pkColumns.length === 1) {
     const col = quoteIdent(args.pkColumns[0]!);
     const values = args.rows.map((r) => r.literals[0]!).join(', ');

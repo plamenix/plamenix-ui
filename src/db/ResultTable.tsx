@@ -89,6 +89,7 @@ import {
   buildAllRowsUpdateSql,
   buildBulkDeleteSql,
   buildBulkUpdateSql,
+  buildPrimaryKeyWhere,
   buildUpdateSql,
   cellToLiteral,
   isDateType,
@@ -1368,6 +1369,12 @@ function VirtualRows({
       .map((i) => editable.columnInfoByIndex[i]?.name)
       .filter((n): n is string => typeof n === 'string');
     if (pkColumns.length !== editable.pkColIndices.length) return null;
+    // The length comparison above passes for an empty key list — `0 !==
+    // 0` is false — so a table with no primary key reached the SQL
+    // builders and produced a predicate of `() OR ()`. Refusing here
+    // surfaces it as the bulk error the caller already renders, rather
+    // than as a syntax error from the server.
+    if (pkColumns.length === 0) return null;
     const out: { idx: number; literals: string[] }[] = [];
     for (const idx of selectedRows) {
       if (deletedRows.has(idx)) continue;
@@ -1450,7 +1457,17 @@ function VirtualRows({
       pkColumns: payload.pkColumns,
       rows: payload.rows.map((r) => ({ literals: r.literals })),
     });
-    const bulkPredicate = builtSql.replace(/^.*?\bWHERE\b/i, '').trim();
+    // Built from the same inputs as the statement rather than
+    // recovered from its text. The previous form stripped everything up
+    // to the first `\bWHERE\b`, which is the wrong `WHERE` as soon as
+    // one appears earlier — a column or table quoted as `"WHERE"` is a
+    // legal Firebird identifier, and the interceptor chain would then
+    // be handed a fragment of the statement as its predicate and make
+    // a policy decision on it.
+    const bulkPredicate = buildPrimaryKeyWhere({
+      pkColumns: payload.pkColumns,
+      rows: payload.rows.map((r) => ({ literals: r.literals })),
+    });
     const decision = await rowDeletingChain.run({
       tabId,
       sessionId,
