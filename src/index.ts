@@ -656,6 +656,11 @@ export {
   type StatementIntent,
 } from './db/statement-pipeline';
 export {
+  dispatchSchemaDdl,
+  type DdlDispatchOptions,
+  type DdlTabPatch,
+} from './db/dispatch-ddl';
+export {
   TableContextMenu,
   type SchemaMenuItem,
   type TableContextMenuProps,
