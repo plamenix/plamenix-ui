@@ -638,6 +638,15 @@ export {
   type UseHealthProbeOptions,
 } from './db/use-health-probe';
 export {
+  useConnectionActions,
+  type ConnectionActions,
+  type ConnectionAdapter,
+  type ConnectionPatch,
+  type ConnectionTab,
+  type ConnectRequest,
+  type UseConnectionActionsOptions,
+} from './db/use-connection-actions';
+export {
   TableContextMenu,
   type SchemaMenuItem,
   type TableContextMenuProps,

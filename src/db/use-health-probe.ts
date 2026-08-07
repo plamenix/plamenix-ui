@@ -55,11 +55,18 @@ export function useHealthProbe({
   intervalMs = 30_000,
 }: UseHealthProbeOptions): void {
   const tabsRef = useRef(tabs);
-  tabsRef.current = tabs;
   const pingRef = useRef(ping);
-  pingRef.current = ping;
   const patchRef = useRef(onPatch);
-  patchRef.current = onPatch;
+  // Refreshed in an effect rather than during render: a render-time
+  // write is visible to a render React may then discard, so under
+  // concurrent rendering the loop below could probe against props from
+  // a render that never committed. Declared first so the values are
+  // current before the interval effect reads them.
+  useEffect(() => {
+    tabsRef.current = tabs;
+    pingRef.current = ping;
+    patchRef.current = onPatch;
+  });
 
   useEffect(() => {
     let cancelled = false;
