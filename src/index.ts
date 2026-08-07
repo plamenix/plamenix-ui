@@ -646,6 +646,7 @@ export {
   type ConnectRequest,
   type UseConnectionActionsOptions,
 } from './db/use-connection-actions';
+export { useShellCommands, type ShellCommandOptions } from './db/use-shell-commands';
 export {
   TableContextMenu,
   type SchemaMenuItem,
