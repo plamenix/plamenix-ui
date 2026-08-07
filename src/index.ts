@@ -455,6 +455,13 @@ export {
   schemaActionApplyingChain,
   type SchemaActionApplyingContext,
 } from './interceptors/schema-action-applying';
+export {
+  installPluginInterceptors,
+  type ExtensionPoint,
+  type InstallPluginInterceptorsOptions,
+  type PluginInterceptorOutcome,
+  type PluginInterceptorTransport,
+} from './interceptors/plugin-bridge';
 export { Field, type FieldProps } from './db/Field';
 export { ConnectionPanel, type ConnectionPanelProps } from './db/ConnectionPanel';
 export { ConnectionScreen, type ConnectionScreenProps } from './db/ConnectionScreen';
