@@ -660,6 +660,7 @@ export {
   type DdlDispatchOptions,
   type DdlTabPatch,
 } from './db/dispatch-ddl';
+export { applySchemaAction, type ApplySchemaActionOptions } from './db/apply-schema-action';
 export {
   TableContextMenu,
   type SchemaMenuItem,
