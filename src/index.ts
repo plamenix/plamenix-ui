@@ -648,6 +648,14 @@ export {
 } from './db/use-connection-actions';
 export { useShellCommands, type ShellCommandOptions } from './db/use-shell-commands';
 export {
+  firstAffected,
+  firstRows,
+  resolveStatement,
+  type RowsResult,
+  type StatementDecision,
+  type StatementIntent,
+} from './db/statement-pipeline';
+export {
   TableContextMenu,
   type SchemaMenuItem,
   type TableContextMenuProps,
