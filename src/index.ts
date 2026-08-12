@@ -670,6 +670,7 @@ export {
   type UseSessionRefreshersOptions,
 } from './db/use-session-refreshers';
 export { profileOntoForm, profileToForm } from './db/profile-form';
+export { countFromCell, quoteIdentifier } from './db/identifier';
 export {
   ShellOverlays,
   appendIdentifier,
