@@ -127,6 +127,7 @@ export {
   type ParsedCombo,
 } from './keybindings/keybinding-contract';
 export { useGlobalKeybindings } from './keybindings/useGlobalKeybindings';
+export { useDefaultKeybindings } from './keybindings/use-default-keybindings';
 export {
   registerBuiltinDefaultKeybindings,
   unregisterBuiltinDefaultKeybindings,
