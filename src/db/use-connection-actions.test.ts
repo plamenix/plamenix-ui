@@ -492,3 +492,110 @@ describe('the health probe', () => {
     });
   });
 });
+
+describe('handleQuickConnect', () => {
+  const PROFILE = {
+    id: 'p1',
+    name: 'Production',
+    host: 'db.example.com',
+    port: 3051,
+    database: '/data/prod.fdb',
+    user: 'APP',
+    pureRust: true,
+    encryptionRequired: true,
+    fbclientPath: null,
+    charset: 'WIN1250',
+    embedded: false,
+    color: null,
+  } as unknown as Parameters<
+    ReturnType<typeof useConnectionActions>['handleQuickConnect']
+  >[0];
+
+  it('runs the connection.opening chain, like the connect button does', async () => {
+    // The gap this closes. Quick-connect reaches the same databases with
+    // the same credentials, so a production gate that stops one has to
+    // stop the other — otherwise the policy is enforced by which button
+    // the user happened to click.
+    const h = setup();
+    const seen: unknown[] = [];
+    intercept((ctx) => {
+      seen.push(ctx);
+      return { action: 'continue' };
+    });
+
+    await act(async () => {
+      await h.rendered.result.current.handleQuickConnect(PROFILE);
+    });
+
+    expect(seen[0]).toMatchObject({
+      profileId: 'p1',
+      host: 'db.example.com',
+      database: '/data/prod.fdb',
+      user: 'APP',
+    });
+  });
+
+  it('opens nothing when a handler refuses', async () => {
+    const h = setup();
+    intercept(() => ({ action: 'cancel', reason: 'production is gated' }));
+
+    await act(async () => {
+      await h.rendered.result.current.handleQuickConnect(PROFILE);
+    });
+
+    expect(h.adapter.connect).not.toHaveBeenCalled();
+    expect(merged(h.patches).error).toBe('production is gated');
+    expect(h.patches.some(([, p]) => p.busy === true)).toBe(false);
+  });
+
+  it('selects the profile and takes its connection details', async () => {
+    const h = setup();
+    await act(async () => {
+      await h.rendered.result.current.handleQuickConnect(PROFILE);
+    });
+
+    const m = merged(h.patches);
+    expect(m.selectedProfileId).toBe('p1');
+    expect(m.profileName).toBe('Production');
+    expect(m.form).toMatchObject({
+      host: 'db.example.com',
+      port: 3051,
+      database: '/data/prod.fdb',
+      user: 'APP',
+      pureRust: true,
+      encryptionRequired: true,
+      charset: 'WIN1250',
+    });
+  });
+
+  it('keeps a password the user already typed', async () => {
+    // Discarding it would make the fast path slower than the slow one.
+    const h = setup();
+    await act(async () => {
+      await h.rendered.result.current.handleQuickConnect(PROFILE);
+    });
+
+    expect(merged(h.patches).form?.password).toBe('pw');
+  });
+
+  it('titles the tab after the profile', async () => {
+    const h = setup();
+    await act(async () => {
+      await h.rendered.result.current.handleQuickConnect(PROFILE);
+    });
+
+    expect(h.renames).toEqual([['t1', 'Production']]);
+  });
+
+  it('reports a refusal without marking the tab dead', async () => {
+    const h = setup({}, { connect: vi.fn().mockRejectedValue(new Error('bad password')) });
+    await act(async () => {
+      await h.rendered.result.current.handleQuickConnect(PROFILE);
+    });
+
+    const m = merged(h.patches);
+    expect(m.error).toContain('bad password');
+    expect(m.health).toBeUndefined();
+    expect(m.busy).toBe(false);
+  });
+});

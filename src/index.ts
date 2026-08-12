@@ -668,6 +668,7 @@ export {
   type SessionRefreshPatch,
   type UseSessionRefreshersOptions,
 } from './db/use-session-refreshers';
+export { profileOntoForm, profileToForm } from './db/profile-form';
 export {
   TableContextMenu,
   type SchemaMenuItem,

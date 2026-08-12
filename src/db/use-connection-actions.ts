@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { connectionOpeningChain } from '../interceptors/connection-opening.js';
-import type { ConnectionForm, TestConnectionResult } from './types.js';
+import { profileOntoForm } from './profile-form.js';
+import type { ConnectionForm, Profile, TestConnectionResult } from './types.js';
 import { useHealthProbe } from './use-health-probe.js';
 
 /**
@@ -57,6 +58,9 @@ export interface ConnectionTab {
  *  loose: the host owns the tab store and this hook only names fields. */
 export interface ConnectionPatch {
   sessionId?: string | null;
+  selectedProfileId?: string | null;
+  profileName?: string;
+  form?: ConnectionForm;
   results?: null;
   error?: string | null;
   busy?: boolean;
@@ -104,6 +108,12 @@ export interface ConnectionActions {
   handleReconnect: () => Promise<void>;
   /** Probes the current form without opening a session. */
   handleTestConnection: () => Promise<void>;
+  /** Opens a session straight from a saved profile, without the user
+   *  visiting the connect form first. Goes through the same
+   *  `connection.opening` chain as {@link ConnectionActions.handleConnect}
+   *  — it reaches the same databases by the same credentials, so a
+   *  policy that gates one has to gate the other. */
+  handleQuickConnect: (profile: Profile) => Promise<void>;
 }
 
 export function useConnectionActions({
@@ -155,54 +165,81 @@ export function useConnectionActions({
     }
   }, []);
 
-  const handleConnect = useCallback(async () => {
-    const {
-      adapter: a,
-      activeTab: tab,
-      patchTab: patch,
-      renameTab: rename,
-      deriveTitle: title,
-      onConnected: connected,
-    } = latest.current;
+  /** Runs the chain, opens the session, and reports it — the body both
+   *  connect paths share. `title` is what the tab gets called. */
+  const openSession = useCallback(
+    async (form: ConnectionForm, profileId: string | null, title: string, extra: ConnectionPatch) => {
+      const {
+        adapter: a,
+        activeTab: tab,
+        patchTab: patch,
+        renameTab: rename,
+        onConnected: connected,
+      } = latest.current;
 
-    const decision = await connectionOpeningChain.run({
-      tabId: tab.id,
-      profileId: tab.selectedProfileId,
-      host: tab.form.host,
-      port: tab.form.port,
-      database: tab.form.database,
-      user: tab.form.user,
-      pureRust: tab.form.pureRust,
-      encryptionRequired: tab.form.encryptionRequired,
-      charset: tab.form.charset,
-    });
-    if (decision.action === 'cancel') {
-      patch(tab.id, { error: decision.reason });
-      return;
-    }
-
-    // `cryptState: null` before the attempt, not after it: leaving the
-    // previous session's badge up while a new connection is in flight
-    // shows an encryption state that belongs to a database the user may
-    // no longer be talking to.
-    patch(tab.id, { error: null, busy: true, cryptState: null });
-    try {
-      const response = await a.connect({ form: tab.form, profileId: tab.selectedProfileId });
-      patch(tab.id, {
-        sessionId: response.sessionId,
-        results: null,
-        health: 'healthy',
-        lastPingAt: Date.now(),
-        connectedAt: Date.now(),
+      const decision = await connectionOpeningChain.run({
+        tabId: tab.id,
+        profileId,
+        host: form.host,
+        port: form.port,
+        database: form.database,
+        user: form.user,
+        pureRust: form.pureRust,
+        encryptionRequired: form.encryptionRequired,
+        charset: form.charset,
       });
-      rename(tab.id, tab.profileName.trim() || title(tab.form));
-      connected(tab.id, response.sessionId);
-    } catch (err) {
-      patch(tab.id, { error: String(err) });
-    } finally {
-      patch(tab.id, { busy: false });
-    }
-  }, []);
+      if (decision.action === 'cancel') {
+        patch(tab.id, { error: decision.reason });
+        return;
+      }
+
+      // `cryptState: null` before the attempt, not after it: leaving the
+      // previous session's badge up while a new connection is in flight
+      // shows an encryption state that belongs to a database the user may
+      // no longer be talking to.
+      patch(tab.id, { error: null, busy: true, cryptState: null, ...extra });
+      try {
+        const response = await a.connect({ form, profileId });
+        patch(tab.id, {
+          sessionId: response.sessionId,
+          results: null,
+          health: 'healthy',
+          lastPingAt: Date.now(),
+          connectedAt: Date.now(),
+        });
+        rename(tab.id, title);
+        connected(tab.id, response.sessionId);
+      } catch (err) {
+        patch(tab.id, { error: String(err) });
+      } finally {
+        patch(tab.id, { busy: false });
+      }
+    },
+    [],
+  );
+
+  const handleConnect = useCallback(async () => {
+    const { activeTab: tab, deriveTitle: title } = latest.current;
+    await openSession(
+      tab.form,
+      tab.selectedProfileId,
+      tab.profileName.trim() || title(tab.form),
+      {},
+    );
+  }, [openSession]);
+
+  const handleQuickConnect = useCallback(
+    async (profile: Profile) => {
+      const { activeTab: tab } = latest.current;
+      const form = profileOntoForm(tab.form, profile);
+      await openSession(form, profile.id, profile.name, {
+        selectedProfileId: profile.id,
+        profileName: profile.name,
+        form,
+      });
+    },
+    [openSession],
+  );
 
   const handleReconnect = useCallback(async () => {
     const { adapter: a, activeTab: tab, patchTab: patch } = latest.current;
@@ -252,5 +289,5 @@ export function useConnectionActions({
     void handleReconnect();
   }, [activeTab.health, activeTab.busy, activeTab.id, autoReconnect, handleReconnect]);
 
-  return { handleConnect, handleReconnect, handleTestConnection };
+  return { handleConnect, handleReconnect, handleTestConnection, handleQuickConnect };
 }
