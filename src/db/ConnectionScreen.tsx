@@ -35,7 +35,6 @@ import {
   type AuthProviderContributionPayload,
   type AuthProviderFormContext,
 } from '../auth/auth-provider-contract';
-import { registerBuiltinPasswordAuthProvider } from '../auth/builtins/password-provider';
 import type {
   ConnectionForm,
   ListAliasesResult,
@@ -224,7 +223,6 @@ export function ConnectionScreen({
   // I5.7 — register the built-in password auth provider through the
   // shared registry. Single mount per ConnectionScreen render cycle;
   // teardown on unmount.
-  useEffect(() => registerBuiltinPasswordAuthProvider(), []);
 
   const authProviderContributions =
     usePluginContributions<AuthProviderContributionPayload>('auth_providers');

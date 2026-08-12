@@ -34,7 +34,6 @@ import {
   type CompletionProviderContributionPayload,
   type CompletionProviderDescriptor,
 } from '../completions/completion-provider-contract';
-import { registerBuiltinFirebirdKeywordsCompletion } from '../completions/builtins/firebird-keywords';
 import {
   lineColToOffset,
   pluginContributionsToDiagnosticProviders,
@@ -42,7 +41,6 @@ import {
   type DiagnosticProviderContributionPayload,
   type DiagnosticProviderDescriptor,
 } from '../diagnostics/diagnostic-provider-contract';
-import { registerBuiltinBasicSyntaxDiagnostic } from '../diagnostics/builtins/basic-syntax';
 import type { Schema } from './types';
 
 /** Theme extension that sets the font size for the content + gutters
@@ -312,7 +310,6 @@ export function SqlEditor({
   // I5.12 — register the built-in Firebird-keywords completion
   // provider through the shared registry. Same idempotent ref-bridge
   // pattern as other built-in registrations.
-  useEffect(() => registerBuiltinFirebirdKeywordsCompletion(), []);
 
   // Live snapshot of registered completion providers, captured into
   // a ref so the CodeMirror autocompletion override (installed once
@@ -327,7 +324,6 @@ export function SqlEditor({
   // I5.13 — register the built-in basic-syntax diagnostic provider.
   // Same ref-bridge so the linter callback (installed once at editor
   // creation) reads the latest descriptors per lint run.
-  useEffect(() => registerBuiltinBasicSyntaxDiagnostic(), []);
   const diagnosticContributions =
     usePluginContributions<DiagnosticProviderContributionPayload>('diagnostics_providers');
   const diagnosticDescriptorsRef = useRef<DiagnosticProviderDescriptor[]>([]);

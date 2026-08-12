@@ -62,11 +62,6 @@ import {
   type CellRendererPayload,
 } from './cell-renderer-contract';
 import { registerBuiltinBlobRenderer } from './builtins/blob-cell-renderer';
-import { registerBuiltinCsvExport } from './builtins/csv-export';
-import { registerBuiltinJsonExport } from './builtins/json-export';
-import { registerBuiltinSqlExport } from './builtins/sql-export';
-import { registerBuiltinXmlExport } from './builtins/xml-export';
-import { registerBuiltinXlsxExport } from './builtins/xlsx-export';
 import {
   pluginContributionsToExportButtons,
   type ExportFormatArgs,
@@ -1174,11 +1169,6 @@ function VirtualRows({
   // independent — a future remove-format toggle could disable any
   // single built-in by skipping its register call without affecting
   // the others.
-  useEffect(() => registerBuiltinCsvExport(), []);
-  useEffect(() => registerBuiltinJsonExport(), []);
-  useEffect(() => registerBuiltinSqlExport(), []);
-  useEffect(() => registerBuiltinXmlExport(), []);
-  useEffect(() => registerBuiltinXlsxExport(), []);
 
   // Toolbar reads contributions live so registry changes (third-party
   // plugin install, settings reload) re-render the export button row

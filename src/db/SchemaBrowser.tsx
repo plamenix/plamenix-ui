@@ -46,7 +46,6 @@ import {
   type SchemaActionContributionPayload,
   type SchemaObjectKind,
 } from './schema-action-contract';
-import { registerBuiltinDbaToolbox } from './builtins/dba-toolbox';
 import type { SchemaDdl } from './schema-actions';
 import type { NewObjectKind } from './NewObjectModal';
 import type { ObjectListKind } from './ObjectListPage';
@@ -243,7 +242,6 @@ export function SchemaBrowser({
   // SET STATISTICS INDEX) surface in the action menu. Independent
   // useEffect so a future Settings panel can disable it without
   // affecting the schema-context-menu registration.
-  useEffect(() => registerBuiltinDbaToolbox(), []);
 
   // Toolbar reads contributions live so registry changes (third-party
   // menu plugin install, settings reload) re-render the menu without

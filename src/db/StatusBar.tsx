@@ -8,7 +8,6 @@ import {
   type StatusBarContext,
   type StatusBarItemContributionPayload,
 } from '../status-bar/status-bar-item-contract';
-import { registerBuiltinDefaultStatusBarItems } from '../status-bar/builtins/default-items';
 import type { StatementOutcome } from './types';
 
 /** Per-button ctx the `status` toolbar slot hands plugins. */
@@ -82,7 +81,6 @@ export function StatusBar({
   // `status_bar_items` registry. Each item's Component owns its own
   // subscriptions (recent-queries hook for last duration, copy-state
   // for the DSN button, etc.). Single mount per StatusBar instance.
-  useEffect(() => registerBuiltinDefaultStatusBarItems(), []);
   const itemContributions =
     usePluginContributions<StatusBarItemContributionPayload>('status_bar_items');
   const descriptors = pluginContributionsToStatusBarItems(itemContributions);

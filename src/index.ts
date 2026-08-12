@@ -9,6 +9,10 @@
  * not preemptively.
  */
 
+export {
+  registerAllBuiltins,
+  useBuiltinContributions,
+} from './builtins';
 export type { Transport } from './transport';
 export { TransportError } from './transport';
 export {

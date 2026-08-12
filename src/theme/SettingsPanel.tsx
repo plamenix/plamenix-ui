@@ -38,12 +38,10 @@ import {
   pluginContributionsToThemes,
   type ThemeContributionPayload,
 } from './theme-contract';
-import { registerBuiltinDefaultThemes } from './builtins/default-themes';
 import {
   pluginContributionsToSettingsPanels,
   type SettingsPanelContributionPayload,
 } from '../settings-panels/settings-panel-contract';
-import { registerBuiltinDefaultSettingsSections } from '../settings-panels/builtins/default-sections';
 import {
   useEditorStore,
   type EditorFontSize,
@@ -89,7 +87,6 @@ export function SettingsPanel({ open, onClose, onOpenDetailed }: SettingsPanelPr
 
   // I5.8 — register the three built-in themes on first SettingsPanel
   // mount. Single-mount discipline (only one SettingsPanel per shell).
-  useEffect(() => registerBuiltinDefaultThemes(), []);
   const themeContributions =
     usePluginContributions<ThemeContributionPayload>('themes');
   const themes = pluginContributionsToThemes(themeContributions);
@@ -793,7 +790,6 @@ export function SettingsPage({ onClose, backLabel = 'Back' }: SettingsPageProps)
   // through the `settings_panels` registry. Each section's Component
   // owns its own store subscriptions, so the SettingsPage no longer
   // holds the omnibus state slice it used to closure-capture.
-  useEffect(() => registerBuiltinDefaultSettingsSections(), []);
   const sectionContributions =
     usePluginContributions<SettingsPanelContributionPayload>('settings_panels');
   const sections = pluginContributionsToSettingsPanels(sectionContributions);

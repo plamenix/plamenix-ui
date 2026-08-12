@@ -7,7 +7,6 @@ import {
   type ObjectInspectorContributionPayload,
   type ObjectInspectorHostHelpers,
 } from '../inspectors/object-inspector-contract';
-import { registerBuiltinTableInspectorTabs } from '../inspectors/builtins/table-inspector-tabs';
 import type {
   ColumnValue,
   Schema,
@@ -115,7 +114,6 @@ export function TableObjectView({
   // TableObjectView mount. Single mount per session in both shells
   // today; double-mount would throw at the registry, but the host
   // never renders two TableObjectViews simultaneously.
-  useEffect(() => registerBuiltinTableInspectorTabs(), []);
 
   const inspectorContributions =
     usePluginContributions<ObjectInspectorContributionPayload>('object_inspectors');

@@ -30,7 +30,6 @@ import {
   pickSqlFormatter,
   type SqlFormatterContributionPayload,
 } from '../formatters/sql-formatter-contract';
-import { registerBuiltinBasicSqlFormatter } from '../formatters/builtins/basic-formatter';
 import { resolveThemeMode, useThemeStore } from '../theme/theme-store';
 import { sqlThemeFor } from './sql-theme';
 import type { DdlSourceKind } from './schema-actions';
@@ -73,8 +72,6 @@ export function RoutineObjectView({
 }: RoutineObjectViewProps) {
   const [copied, setCopied] = useState(false);
   const [formatted, setFormatted] = useState<string | null>(null);
-
-  useEffect(() => registerBuiltinBasicSqlFormatter(), []);
   const formatterContributions =
     usePluginContributions<SqlFormatterContributionPayload>('sql_formatters');
 

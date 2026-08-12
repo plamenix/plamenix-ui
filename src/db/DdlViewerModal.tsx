@@ -24,7 +24,6 @@ import {
   pickSqlFormatter,
   type SqlFormatterContributionPayload,
 } from '../formatters/sql-formatter-contract';
-import { registerBuiltinBasicSqlFormatter } from '../formatters/builtins/basic-formatter';
 import type { DdlSourceKind } from './schema-actions';
 
 export interface DdlViewerModalProps {
@@ -75,7 +74,6 @@ export function DdlViewerModal({
   // I5.6 — register the basic built-in SQL formatter once per modal
   // mount. Same idempotent ref-bridge pattern as other built-in
   // registrations; the modal renders at most once per shell.
-  useEffect(() => registerBuiltinBasicSqlFormatter(), []);
   const formatterContributions =
     usePluginContributions<SqlFormatterContributionPayload>('sql_formatters');
 

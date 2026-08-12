@@ -22,7 +22,6 @@ import {
   type ImportSourceContributionPayload,
   type ImportSourceFormProps,
 } from './import-source-contract';
-import { registerBuiltinCsvImporter } from './builtins/csv-importer';
 import type { Row, Schema } from '../db/types';
 
 export interface ImportWizardModalProps {
@@ -51,7 +50,6 @@ export function ImportWizardModal({
 }: ImportWizardModalProps) {
   // Built-in CSV importer registers once per modal lifetime — single
   // wizard per shell today, double-mount would throw at the registry.
-  useEffect(() => registerBuiltinCsvImporter(), []);
 
   const sourceContributions =
     usePluginContributions<ImportSourceContributionPayload>('import_sources');

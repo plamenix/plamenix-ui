@@ -9,8 +9,20 @@
  */
 
 import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { registerAllBuiltins } from '../builtins.js';
 import { ShellOverlays, appendIdentifier, type ShellOverlayTab } from './ShellOverlays.js';
+
+// The shell registers the built-in contributions once at boot, and the
+// status bar's default items are among them. Components no longer
+// self-register — that is what made a feature's availability depend on
+// an unrelated component being mounted — so a test that renders one in
+// isolation has to stand in for the shell.
+let disposeBuiltins: () => void;
+beforeAll(() => {
+  disposeBuiltins = registerAllBuiltins();
+});
+afterAll(() => disposeBuiltins());
 
 afterEach(cleanup);
 
