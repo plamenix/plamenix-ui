@@ -662,6 +662,13 @@ export {
 } from './db/dispatch-ddl';
 export { applySchemaAction, type ApplySchemaActionOptions } from './db/apply-schema-action';
 export {
+  useSessionRefreshers,
+  type SessionReadAdapter,
+  type SessionRefreshers,
+  type SessionRefreshPatch,
+  type UseSessionRefreshersOptions,
+} from './db/use-session-refreshers';
+export {
   TableContextMenu,
   type SchemaMenuItem,
   type TableContextMenuProps,
