@@ -676,6 +676,11 @@ export {
   type ShellOverlaysProps,
 } from './db/ShellOverlays';
 export {
+  describeExportScope,
+  runGuardedExport,
+  type GuardedExportOptions,
+} from './db/guarded-export';
+export {
   TableContextMenu,
   type SchemaMenuItem,
   type TableContextMenuProps,
