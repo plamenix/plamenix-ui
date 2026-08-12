@@ -105,6 +105,14 @@ export interface QueryPanelProps {
   bookmarks?: BookmarkMap | undefined;
   onSqlChange: (value: string) => void;
   onExecute: () => void;
+  /** Ends the session a stuck statement is running in, then reconnects.
+   *
+   *  Deliberately not called "cancel": Firebird offers no way to stop a
+   *  running statement through either backend Plamenix ships, so the
+   *  only lever is the attachment itself. The button says so, and the
+   *  host confirms the cost when there is uncommitted work to lose.
+   *  Omit to leave a stuck tab with no way out. */
+  onAbandon?: (() => void) | undefined;
   onClose: () => void;
   onBookmarksChange?: ((next: BookmarkMap) => void) | undefined;
   /** Opens the {@link StatsDashboard}. When omitted, the dashboard
@@ -161,6 +169,7 @@ export function QueryPanel({
   bookmarks,
   onSqlChange,
   onExecute,
+  onAbandon,
   onClose,
   onBookmarksChange,
   onOpenStats,
@@ -275,6 +284,17 @@ export function QueryPanel({
             <LogOut className="h-3.5 w-3.5" />
             Disconnect
           </button>
+          {busy && onAbandon ? (
+            <button
+              type="button"
+              onClick={onAbandon}
+              title="Stop waiting and reconnect"
+              className="inline-flex items-center gap-1.5 rounded-md border border-danger px-2.5 py-1 text-xs text-danger transition-colors hover:bg-danger-subtle"
+            >
+              <CircleAlert className="h-3.5 w-3.5" />
+              Stop
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onExecute}

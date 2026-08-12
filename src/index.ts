@@ -676,6 +676,13 @@ export {
 export { profileOntoForm, profileToForm } from './db/profile-form';
 export { countFromCell, quoteIdentifier } from './db/identifier';
 export {
+  abandonNeedsConfirmation,
+  abandonStatement,
+  describeAbandonCost,
+  isStaleSession,
+  type AbandonOptions,
+} from './db/abandon-statement';
+export {
   ShellOverlays,
   appendIdentifier,
   type ShellOverlayTab,
