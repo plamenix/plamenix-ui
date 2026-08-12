@@ -670,6 +670,12 @@ export {
 } from './db/use-session-refreshers';
 export { profileOntoForm, profileToForm } from './db/profile-form';
 export {
+  ShellOverlays,
+  appendIdentifier,
+  type ShellOverlayTab,
+  type ShellOverlaysProps,
+} from './db/ShellOverlays';
+export {
   TableContextMenu,
   type SchemaMenuItem,
   type TableContextMenuProps,
