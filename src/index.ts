@@ -13,6 +13,7 @@ export {
   registerAllBuiltins,
   useBuiltinContributions,
 } from './builtins';
+export { ErrorBoundary, type ErrorBoundaryProps } from './ErrorBoundary';
 export type { Transport } from './transport';
 export { TransportError } from './transport';
 export {
