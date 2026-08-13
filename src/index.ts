@@ -681,6 +681,7 @@ export {
 } from './db/use-session-refreshers';
 export { profileOntoForm, profileToForm } from './db/profile-form';
 export { countFromCell, quoteIdentifier } from './db/identifier';
+export { setBlobViewer } from './db/builtins/blob-cell-renderer';
 export {
   abandonNeedsConfirmation,
   abandonStatement,

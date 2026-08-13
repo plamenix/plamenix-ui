@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import {
   registerBuiltinBlobRenderer,
+  setBlobViewer,
   unregisterBuiltinBlobRenderer,
 } from './blob-cell-renderer.js';
 import { isBuiltinPlugin } from '../../plugin-react/builtin.js';
@@ -15,6 +16,9 @@ import type {
   CellRendererPayload,
 } from '../cell-renderer-contract.js';
 import type { BlobRef } from '../types.js';
+
+/** The table these contexts belong to. */
+const TABLE = 'table-under-test';
 
 const SAMPLE_BLOB: BlobRef = {
   id: 'b-1',
@@ -29,6 +33,7 @@ function blobCtx(blob: BlobRef = SAMPLE_BLOB, colIndex = 3): CellRendererContext
     columnInfo: null,
     rowIndex: 5,
     colIndex,
+    tableId: TABLE,
   };
 }
 
@@ -49,12 +54,14 @@ describe('builtin BLOB cell renderer (I4.1)', () => {
   afterEach(() => {
     cleanup();
     unregisterBuiltinBlobRenderer();
+    setBlobViewer(TABLE, () => undefined)();
     registry.__reset();
   });
 
   it('registers under the built-in namespace + claims blob cells', () => {
     const open = vi.fn();
-    registerBuiltinBlobRenderer(open);
+    registerBuiltinBlobRenderer();
+    setBlobViewer(TABLE, open);
 
     const contributions = registry.getContributions('cell_renderers');
     expect(contributions).toHaveLength(1);
@@ -66,7 +73,8 @@ describe('builtin BLOB cell renderer (I4.1)', () => {
 
   it('renders the BLOB button with leading-hex preview when claiming a blob cell', () => {
     const open = vi.fn();
-    registerBuiltinBlobRenderer(open);
+    registerBuiltinBlobRenderer();
+    setBlobViewer(TABLE, open);
     const { container } = render(<ProbeCell ctx={blobCtx()} />);
     const btn = container.querySelector('button');
     expect(btn).not.toBeNull();
@@ -78,7 +86,8 @@ describe('builtin BLOB cell renderer (I4.1)', () => {
 
   it('truncates the hex preview with ellipsis when the blob exceeds the preview length', () => {
     const open = vi.fn();
-    registerBuiltinBlobRenderer(open);
+    registerBuiltinBlobRenderer();
+    setBlobViewer(TABLE, open);
     const { container } = render(<ProbeCell ctx={blobCtx()} />);
     const btn = container.querySelector('button');
     // sizeBytes 256 * 2 = 512 hex chars total; preview only 16 →
@@ -88,7 +97,8 @@ describe('builtin BLOB cell renderer (I4.1)', () => {
 
   it('forwards click to the registered open callback with the cell context bound', () => {
     const open = vi.fn();
-    registerBuiltinBlobRenderer(open);
+    registerBuiltinBlobRenderer();
+    setBlobViewer(TABLE, open);
     const ctx = blobCtx(SAMPLE_BLOB, 7);
     const { container } = render(<ProbeCell ctx={ctx} />);
     fireEvent.click(container.querySelector('button')!);
@@ -98,7 +108,8 @@ describe('builtin BLOB cell renderer (I4.1)', () => {
 
   it('does NOT claim non-blob cells (cell.type guard)', () => {
     const open = vi.fn();
-    registerBuiltinBlobRenderer(open);
+    registerBuiltinBlobRenderer();
+    setBlobViewer(TABLE, open);
     const ctx: CellRendererContext = {
       cell: { type: 'text', value: 'hello' },
       columnName: 'x',
@@ -126,7 +137,8 @@ describe('builtin BLOB cell renderer (I4.1)', () => {
   });
 
   it('explicit unregisterBuiltinBlobRenderer is equivalent to the teardown closure', () => {
-    registerBuiltinBlobRenderer(vi.fn());
+    registerBuiltinBlobRenderer();
+    setBlobViewer(TABLE, vi.fn());
     unregisterBuiltinBlobRenderer();
     expect(registry.getContributions('cell_renderers')).toHaveLength(0);
   });
@@ -148,7 +160,8 @@ describe('builtin BLOB cell renderer (I4.1)', () => {
       ],
     });
     const open = vi.fn();
-    registerBuiltinBlobRenderer(open);
+    registerBuiltinBlobRenderer();
+    setBlobViewer(TABLE, open);
 
     const { getByTestId, container } = render(<ProbeCell ctx={blobCtx()} />);
     expect(getByTestId('thumb')).toBeTruthy();
@@ -158,5 +171,62 @@ describe('builtin BLOB cell renderer (I4.1)', () => {
     // called above via the public re-export form — not destructuring
     // here is intentional, `registerContributions` is the same fn.
     void registerContributions;
+  });
+});
+
+/**
+ * Registration moved out of `ResultTable`'s mount effect.
+ *
+ * It used to register there, closing over that table's viewer callback.
+ * `MultiResultView` renders one `ResultTable` per successful outcome,
+ * so a two-SELECT script mounted two of them, the second registration
+ * threw `already registered`, and with no error boundary in either
+ * shell the uncaught effect error unmounted the whole React root — a
+ * blank app and every tab's state gone, on a workflow the product has
+ * dedicated Rust statement splitting for.
+ *
+ * Refcounting alone would not have been enough: the first
+ * registration's closure would still have routed the second table's
+ * BLOB clicks to the first table's viewer.
+ */
+describe('one registration, many tables', () => {
+  afterEach(() => {
+    unregisterBuiltinBlobRenderer();
+    registry.__reset();
+  });
+
+  it('registers once for the whole shell, not once per table', () => {
+    registerBuiltinBlobRenderer();
+    expect(() => registerBuiltinBlobRenderer()).toThrow(/already registered/);
+  });
+
+  it('opens the viewer belonging to the table that was clicked', () => {
+    registerBuiltinBlobRenderer();
+    const first = vi.fn();
+    const second = vi.fn();
+    setBlobViewer('table-1', first);
+    setBlobViewer('table-2', second);
+
+    const { container } = render(
+      <ProbeCell ctx={{ ...blobCtx(), tableId: 'table-2' }} />,
+    );
+    fireEvent.click(container.querySelector('button') as HTMLButtonElement);
+
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for a table that has unmounted', () => {
+    // A closed table's viewer must not keep receiving clicks, and a
+    // click with no registered table must not throw inside render.
+    registerBuiltinBlobRenderer();
+    const open = vi.fn();
+    setBlobViewer('gone', open)();
+
+    const { container } = render(<ProbeCell ctx={{ ...blobCtx(), tableId: 'gone' }} />);
+    expect(() =>
+      fireEvent.click(container.querySelector('button') as HTMLButtonElement),
+    ).not.toThrow();
+    expect(open).not.toHaveBeenCalled();
   });
 });

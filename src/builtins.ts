@@ -3,6 +3,7 @@ import { registerBuiltinPasswordAuthProvider } from './auth/builtins/password-pr
 import { registerBuiltinFirebirdKeywordsCompletion } from './completions/builtins/firebird-keywords.js';
 import { registerBuiltinDefaultDashboardSections } from './dashboard/builtins/default-sections.js';
 import { registerBuiltinBasicSyntaxDiagnostic } from './diagnostics/builtins/basic-syntax.js';
+import { registerBuiltinBlobRenderer } from './db/builtins/blob-cell-renderer.js';
 import { registerBuiltinCsvExport } from './db/builtins/csv-export.js';
 import { registerBuiltinDbaToolbox } from './db/builtins/dba-toolbox.js';
 import { registerBuiltinFirebirdTips } from './db/builtins/firebird-tips-pack.js';
@@ -53,6 +54,7 @@ import { registerBuiltinDefaultThemes } from './theme/builtins/default-themes.js
  */
 const BUILTINS: (() => () => void)[] = [
   registerBuiltinBasicSqlFormatter,
+  registerBuiltinBlobRenderer,
   registerBuiltinBasicSyntaxDiagnostic,
   registerBuiltinCsvExport,
   registerBuiltinCsvImporter,

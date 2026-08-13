@@ -39,6 +39,13 @@ export interface CellRendererContext {
    *  by built-in renderers that key host-side state by `(rowIndex,
    *  colIndex)` — e.g. the BLOB renderer's edit-buffer cache. */
   colIndex: number;
+  /** Identifies the result table this cell belongs to.
+   *
+   *  A multi-statement script renders one table per outcome, so
+   *  `tabId` does not distinguish them. A renderer that opens
+   *  host-side UI has to know which table was clicked, or a click in
+   *  the second table opens the first table's viewer. */
+  tableId: string;
 }
 
 export interface CellRendererPayload {

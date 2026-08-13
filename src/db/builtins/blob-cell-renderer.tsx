@@ -58,7 +58,33 @@ export type OpenBlobViewer = (
  * Returns a teardown function for convenience in `useEffect`
  * patterns: `useEffect(() => registerBuiltinBlobRenderer(open), [])`.
  */
-export function registerBuiltinBlobRenderer(open: OpenBlobViewer): () => void {
+/**
+ * Per-table viewers, keyed by the id in the renderer context.
+ *
+ * The registration used to take one `open` callback and close over it,
+ * which meant it had to happen inside a `ResultTable` — so two tables
+ * registered twice, and the registry throws on a duplicate. A
+ * two-SELECT script therefore crashed the React root in both shells,
+ * because neither has an error boundary. Refcounting alone would not
+ * have fixed it: the first registration's closure would still have
+ * routed the second table's clicks to the first table's viewer.
+ */
+const viewers = new Map<string, OpenBlobViewer>();
+
+/**
+ * Points this table's BLOB cells at its own viewer.
+ *
+ * @returns A disposer that unregisters the table. Call it on unmount,
+ * or a closed table's viewer keeps receiving clicks.
+ */
+export function setBlobViewer(tableId: string, open: OpenBlobViewer): () => void {
+  viewers.set(tableId, open);
+  return () => {
+    viewers.delete(tableId);
+  };
+}
+
+export function registerBuiltinBlobRenderer(): () => void {
   const payload: CellRendererPayload = {
     matches: (ctx) => ctx.cell.type === 'blob',
     Component: function BuiltinBlobCell({ ctx }: { ctx: CellRendererContext }) {
@@ -69,7 +95,7 @@ export function registerBuiltinBlobRenderer(open: OpenBlobViewer): () => void {
       return (
         <button
           type="button"
-          onClick={() => open(ref, ctx.columnName, ctx.rowIndex, ctx.colIndex)}
+          onClick={() => viewers.get(ctx.tableId)?.(ref, ctx.columnName, ctx.rowIndex, ctx.colIndex)}
           title="Open BLOB viewer"
           className="inline-flex items-center gap-1 rounded bg-warning-subtle px-1.5 py-0.5 font-mono text-[10px] text-warning transition-colors hover:bg-warning hover:text-warning-subtle"
         >

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   getCoreRowModel,
@@ -61,7 +61,7 @@ import {
   type CellRendererContext,
   type CellRendererPayload,
 } from './cell-renderer-contract';
-import { registerBuiltinBlobRenderer } from './builtins/blob-cell-renderer';
+import { setBlobViewer } from './builtins/blob-cell-renderer';
 import {
   pluginContributionsToExportButtons,
   type ExportFormatArgs,
@@ -238,6 +238,9 @@ interface CellContext {
   rowIndex: number;
   /** Zero-based column index within the current result row. */
   colIndex: number;
+  /** Which table this cell belongs to; routes host-side UI back to the
+   *  right instance when a batch renders several. */
+  tableId: string;
   /** Fired when a BLOB cell is clicked; the host opens the viewer.
    *  Kept on the legacy default-switch fallback path; the built-in
    *  BLOB renderer (I4.1) reads `openBlobViewer` from a shell-scoped
@@ -471,6 +474,7 @@ function CellContent({ cell, ctx }: { cell: ColumnValue; ctx: CellContext }) {
     columnInfo: ctx.columnInfo,
     rowIndex: ctx.rowIndex,
     colIndex: ctx.colIndex,
+    tableId: ctx.tableId,
   };
   const claimed = pickCellRenderer(renderers, rendererCtx);
   if (claimed) {
@@ -1147,18 +1151,21 @@ function VirtualRows({
   // contribution registry on mount. Closure-captures
   // `openBlobViewer` via a ref so the registered Component always
   // calls the latest instance even though `openBlobViewer` itself is
-  // re-created per render. The unregister is paired in the effect's
-  // cleanup so the registration window matches the table's mount
-  // window — multiple ResultTables mounting simultaneously would
-  // double-register and throw at the registry level, but the desktop
-  // and web shells render at most one ResultTable per session today.
+  // The renderer itself is registered once at shell boot. This hands
+  // it *this* table's viewer, keyed by an id the renderer reads back
+  // out of the cell context — a multi-statement script renders one
+  // table per outcome, and `tabId` is shared across all of them.
+  const tableId = useId();
   const openBlobViewerRef = useRef(openBlobViewer);
-  openBlobViewerRef.current = openBlobViewer;
   useEffect(() => {
-    return registerBuiltinBlobRenderer((ref, name, rowIdx, colIdx) => {
+    openBlobViewerRef.current = openBlobViewer;
+  });
+  useEffect(
+    () => setBlobViewer(tableId, (ref, name, rowIdx, colIdx) => {
       openBlobViewerRef.current(ref, name, rowIdx, colIdx);
-    });
-  }, []);
+    }),
+    [tableId],
+  );
 
   // I4.2-I4.6 — register the five built-in exporters through the
   // `export_formats` contribution point. Same mount-window discipline
@@ -2459,6 +2466,7 @@ function VirtualRows({
                                   columnInfo: editable?.columnInfoByIndex[j] ?? null,
                                   rowIndex: rowIdx,
                                   colIndex: j,
+                                  tableId,
                                   onBlobClick: (ref, name) => openBlobViewer(ref, name, rowIdx, j),
                                 }}
                               />
