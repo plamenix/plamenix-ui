@@ -130,6 +130,12 @@ export {
   type KeybindingDescriptor,
   type ParsedCombo,
 } from './keybindings/keybinding-contract';
+export {
+  isForwardable,
+  serialiseForHost,
+  usePluginEventForwarding,
+  type PluginEventForwardingOptions,
+} from './events/use-plugin-event-forwarding';
 export { useGlobalKeybindings } from './keybindings/useGlobalKeybindings';
 export { useDefaultKeybindings } from './keybindings/use-default-keybindings';
 export {
