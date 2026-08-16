@@ -19,18 +19,19 @@ import { eventBus } from './event-bus.js';
 import {
   isForwardable,
   serialiseForHost,
+  sessionOf,
   usePluginEventForwarding,
 } from './use-plugin-event-forwarding.js';
 
 afterEach(cleanup);
 
 function setup(patterns: string[]) {
-  const forwarded: [string, string][] = [];
+  const forwarded: [string, string, string | undefined][] = [];
   const skipped: [string, string][] = [];
   const rendered = renderHook(() =>
     usePluginEventForwarding({
       subscribedPatterns: patterns,
-      forward: (topic, payload) => forwarded.push([topic, payload]),
+      forward: (topic, payload, sessionId) => forwarded.push([topic, payload, sessionId]),
       onSkipped: (topic, reason) => skipped.push([topic, reason]),
     }),
   );
@@ -104,7 +105,7 @@ describe('usePluginEventForwarding', () => {
     const h = setup(['query/executed']);
     eventBus.emit('query/executed', { rows: 3 });
 
-    expect(h.forwarded).toEqual([['query/executed', '{"rows":3}']]);
+    expect(h.forwarded).toEqual([['query/executed', '{"rows":3}', undefined]]);
   });
 
   it('sends nothing when no plugin is subscribed', () => {
@@ -171,5 +172,49 @@ describe('usePluginEventForwarding', () => {
     rerender({ subscribed: ['query/executed'] });
     eventBus.emit('query/executed', {});
     expect(forwarded).toEqual(['query/executed']);
+  });
+});
+
+describe('the session an event is about', () => {
+  it('carries it alongside the event', () => {
+    // This is what makes a subscribing plugin's `db` capability usable
+    // while it handles the event. Without a session the host has
+    // nothing to answer "the one I called you for" with, and every `db`
+    // import refuses — so a plugin the install dialog said had database
+    // access would be denied it exactly when it tried to use it.
+    const h = setup(['query/executed']);
+    eventBus.emit('query/executed', { sessionId: 'sess-1', sql: 'SELECT 1' });
+
+    expect(h.forwarded[0]?.[2]).toBe('sess-1');
+  });
+
+  it('sends none for an event that is not about a session', () => {
+    const h = setup(['**']);
+    eventBus.emit('theme/changed', { mode: 'dark' });
+
+    expect(h.forwarded[0]?.[2]).toBeUndefined();
+  });
+
+  it('ignores a sessionId that is not a usable string', () => {
+    // `null` is the shape a disconnected tab's payload carries, and it
+    // is not a session.
+    const h = setup(['**']);
+    eventBus.emit('query/failed', { sessionId: null, error: 'x' });
+    eventBus.emit('query/failed', { sessionId: '', error: 'x' });
+
+    expect(h.forwarded.map((f) => f[2])).toEqual([undefined, undefined]);
+  });
+});
+
+describe('sessionOf', () => {
+  it('reads a session out of a payload', () => {
+    expect(sessionOf({ sessionId: 'abc' })).toBe('abc');
+  });
+
+  it('reports none for anything that does not name one', () => {
+    expect(sessionOf(null)).toBeUndefined();
+    expect(sessionOf('a string')).toBeUndefined();
+    expect(sessionOf({})).toBeUndefined();
+    expect(sessionOf({ sessionId: 42 })).toBeUndefined();
   });
 });

@@ -36,8 +36,13 @@ export interface PluginEventForwardingOptions {
   subscribedPatterns: readonly string[];
   /** Hands one event to the plugin host. Failures are the host's to
    *  report; this returns void because nothing in the UI should stall
-   *  on a plugin. */
-  forward: (topic: string, payload: string) => void;
+   *  on a plugin.
+   *
+   *  `sessionId` is the session the event is about, lifted from the
+   *  payload. It is what makes a subscribing plugin's `db` capability
+   *  usable while it handles the event: the host answers "the session I
+   *  called you for", and without one every `db` import refuses. */
+  forward: (topic: string, payload: string, sessionId: string | undefined) => void;
   /** Cap on a serialised payload. The host refuses oversized ones
    *  anyway; refusing here saves the round trip and keeps the reason
    *  legible. Defaults to 64 KiB. */
@@ -49,6 +54,20 @@ export interface PluginEventForwardingOptions {
 const DEFAULT_MAX_PAYLOAD = 64 * 1024;
 
 /** Whether any subscribed pattern wants this topic. */
+/**
+ * Reads the session a payload is about, when it names one.
+ *
+ * Most shell payloads carry `sessionId` because most shell events are
+ * about a session. Lifted here rather than threaded separately so the
+ * two cannot disagree — the event and the session it is delivered under
+ * come from the same object.
+ */
+export function sessionOf(payload: unknown): string | undefined {
+  if (payload === null || typeof payload !== 'object') return undefined;
+  const value = (payload as { sessionId?: unknown }).sessionId;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 export function isForwardable(topic: string, patterns: readonly string[]): boolean {
   return patterns.some((pattern) => {
     try {
@@ -116,7 +135,7 @@ export function usePluginEventForwarding({
           current.onSkipped?.(topic, serialised.reason);
           return;
         }
-        current.forward(topic, serialised.json);
+        current.forward(topic, serialised.json, sessionOf(payload));
       },
     );
     return () => subscription.dispose();

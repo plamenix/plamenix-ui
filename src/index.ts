@@ -134,6 +134,7 @@ export {
 export {
   isForwardable,
   serialiseForHost,
+  sessionOf,
   usePluginEventForwarding,
   type PluginEventForwardingOptions,
 } from './events/use-plugin-event-forwarding';
