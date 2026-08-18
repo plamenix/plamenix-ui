@@ -7,7 +7,7 @@
  * other generic phrasings.
  */
 
-import { ArrowLeft, ExternalLink, Github, Info } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Info } from 'lucide-react';
 
 export interface AboutPageProps {
   /** App version (`1.0.0-beta.0`, etc.). Surfaces at the top of the
@@ -88,7 +88,6 @@ export function AboutPage({ version, onClose, backLabel = 'Back' }: AboutPagePro
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 rounded-md border border-edge bg-canvas px-3 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:bg-elevated hover:text-fg"
             >
-              <Github className="h-3.5 w-3.5" />
               Source on GitHub
               <ExternalLink className="h-3 w-3 text-fg-subtle" />
             </a>

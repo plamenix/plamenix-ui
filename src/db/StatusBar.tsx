@@ -1,5 +1,8 @@
 import { useEffect } from 'react';
-import { Github } from 'lucide-react';
+// `ExternalLink`, not `Github`: lucide dropped its brand icons in 1.x
+// and the shells resolve 1.14, so the named import failed at module
+// load and took the whole app down with it.
+import { ExternalLink } from 'lucide-react';
 import { ToolbarSlot } from '../toolbar/ToolbarSlot';
 import { usePluginContributions } from '../plugin-react/usePluginContributions';
 import {
@@ -128,7 +131,7 @@ export function StatusBar({
           className="inline-flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:bg-elevated hover:text-fg"
           title={`Visit ${credit.name} on GitHub`}
         >
-          <Github className="h-3 w-3" />
+          <ExternalLink className="h-3 w-3" />
           <span>
             © {credit.year} {credit.name} · {credit.brand}
           </span>
