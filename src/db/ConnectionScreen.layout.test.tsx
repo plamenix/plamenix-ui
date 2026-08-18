@@ -95,6 +95,31 @@ describe('the connect action bar', () => {
     expect(scrollingAncestor(save)).toBeNull();
   });
 
+  it('leaves Advanced settings with the fields, not in the bar', () => {
+    // It opens a drawer of further *connection settings*, so it belongs
+    // beside the connection details rather than beside Save and
+    // Connect. It scrolls with them, which is fine — what must not
+    // scroll away is the pair that commits the form.
+    renderScreen();
+    const advanced = screen.getByRole('button', { name: /advanced settings/i });
+    const bar = screen.getByRole('button', { name: /^connect$/i }).parentElement;
+
+    expect(scrollingAncestor(advanced)).not.toBeNull();
+    expect(bar?.contains(advanced)).toBe(false);
+  });
+
+  it('keeps only Save and Connect in the pinned bar', () => {
+    // The bar is for committing the form. Anything else in it competes
+    // with the two actions that matter.
+    renderScreen();
+    const bar = screen.getByRole('button', { name: /^connect$/i }).parentElement;
+    const labels = [...(bar?.querySelectorAll('button') ?? [])].map((b) =>
+      (b.textContent ?? '').trim(),
+    );
+
+    expect(labels).toEqual(['Save', 'Connect']);
+  });
+
   it('still scrolls the fields', () => {
     // The fields genuinely can overflow — the point is that they are
     // what scrolls, not the actions.

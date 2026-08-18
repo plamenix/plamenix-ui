@@ -106,9 +106,9 @@ export interface ConnectionScreenProps {
 }
 
 const INPUT_CLASS =
-  'w-full rounded-lg border border-edge bg-inset px-3 py-2 text-sm text-fg placeholder:text-fg-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
+  'w-full rounded-lg border border-edge bg-inset px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
 
-const LABEL_CLASS = 'mb-1 block text-[11px] font-medium uppercase tracking-wide text-fg-muted';
+const LABEL_CLASS = 'mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-fg-muted';
 
 /** Pill for the EPF-folder status row. Green tick when found, amber
  *  shield when not. */
@@ -806,12 +806,35 @@ export function ConnectionScreen({
                       className={INPUT_CLASS}
                     />
                   )}
+                  {/* A link under the field it relates to, rather than a
+                      button in the action bar: it opens a drawer of
+                      further connection settings, so it belongs with the
+                      connection details and not beside Save and Connect.
+                      Matches Test Connection, the screen's other inline
+                      action. */}
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedOpen(true)}
+                    title="Encryption · Pure-Rust · fbclient · charset"
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-medium text-accent transition-colors hover:text-accent-hover"
+                  >
+                    <SlidersHorizontal className="h-3 w-3" />
+                    Advanced settings
+                    {advancedTouched > 0 && (
+                      <span className="rounded-full bg-accent px-1.5 py-px text-[10px] font-semibold text-fg-inverted">
+                        {advancedTouched}
+                      </span>
+                    )}
+                  </button>
                   {aliasOpen && (
                     <div
                       ref={aliasPopRef}
                       role="dialog"
                       aria-label="databases.conf aliases"
-                      className="absolute right-0 top-full z-30 mt-1 w-80 overflow-hidden rounded-lg border border-edge bg-panel shadow-[0_12px_40px_rgba(0,0,0,0.25)]"
+                      // Drops upward. The field it hangs off sits near the foot of the
+                      // form, so opening downward put the list behind the pinned
+                      // action bar and clipped it at the pane edge.
+                      className="absolute bottom-full right-0 z-30 mb-1 w-80 overflow-hidden rounded-lg border border-edge bg-panel shadow-[0_12px_40px_rgba(0,0,0,0.25)]"
                     >
                       <header className="flex items-center justify-between border-b border-edge bg-canvas px-3 py-2">
                         <div className="flex items-center gap-2 text-[11px] text-fg-muted">
@@ -877,34 +900,16 @@ export function ConnectionScreen({
                     </div>
                   )}
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => setAdvancedOpen(true)}
-                  className="group flex w-full items-center gap-3 rounded-lg border border-edge bg-canvas px-3 py-2.5 text-left transition-colors hover:border-accent/40 hover:bg-elevated"
-                >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-subtle text-accent">
-                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="flex-1">
-                    <span className="block text-[12px] font-semibold text-fg">
-                      Advanced settings
-                    </span>
-                    <span className="block truncate text-[10px] text-fg-subtle">
-                      Encryption · Pure-Rust · fbclient · charset
-                      {advancedTouched > 0 && (
-                        <span className="ml-1 text-accent">· {advancedTouched} changed</span>
-                      )}
-                    </span>
-                  </span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-fg-subtle transition-transform group-hover:translate-x-0.5 group-hover:text-fg" />
-                </button>
               </div>
             </div>
           </div>
 
-          {/* Pinned: always reachable regardless of window height. */}
-          <div className="mx-auto flex w-full max-w-[640px] shrink-0 gap-2 border-t border-edge bg-panel px-8 py-4">
+          {/* Pinned: always reachable regardless of window height.
+              Advanced settings sits here rather than at the foot of the
+              fields because it opens a drawer — it is an action, like
+              the two beside it, not a field. Below the fold it was also
+              the least discoverable thing on the screen. */}
+          <div className="mx-auto flex w-full max-w-[640px] shrink-0 items-center gap-2 border-t border-edge bg-panel px-8 py-4">
             <button
               type="button"
               title={isCurrentSaved ? 'Profile saved' : 'Save profile'}
