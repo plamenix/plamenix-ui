@@ -60,6 +60,7 @@ import type {
   TableInfo,
   TriggerInfo,
 } from './types';
+import { quoteIdentifier } from './identifier.js';
 
 export interface SchemaBrowserExtra {
   /** Optional handler invoked by the "+ New table…" button in the
@@ -78,6 +79,23 @@ export interface SchemaBrowserProps extends SchemaBrowserExtra {
   /** Fired when the user clicks a table or column name, with the
    *  identifier the host should insert into the query editor. Omit to
    *  make node labels non-interactive. */
+  /**
+   * Puts an identifier on the clipboard.
+   *
+   * `identifier` is quoted and ready to paste into SQL; `label` is the
+   * unquoted human form, for the confirmation the host shows. Omit to
+   * make names inert rather than copyable.
+   */
+  onCopyIdentifier?: ((identifier: string, label: string) => void) | undefined;
+  /**
+   * Appends an identifier to the editor buffer.
+   *
+   * @deprecated Blind appending is what made clicking a column produce
+   * invalid SQL. Nothing calls this any more; drag a node into the
+   * editor to insert at a chosen point, or use `onCopyIdentifier`. Kept
+   * so the prop's removal is a separate, announced break — it is public
+   * API on a component the plugin system wires into.
+   */
   onSelect?: (identifier: string) => void;
   /** Fired when the user picks a DDL action from any object's
    *  right-click menu. The browser never executes SQL itself; the
@@ -166,10 +184,21 @@ interface MenuState {
 /** Builds the `draggable` + `onDragStart` props that publish `id` as
  *  `text/plain`. Listeners in `SqlEditor` insert that string at the
  *  caret position when the drag lands inside the editor. */
-function dragProps(id: string): {
+/**
+ * Makes a node draggable, carrying the identifier it stands for.
+ *
+ * The payload is quoted, because what lands in the editor is SQL. An
+ * unquoted `orders` or `MyTable` is folded to upper case by Firebird and
+ * resolves to an object that does not exist — the drop looked like it
+ * worked and the statement failed later, away from the gesture that
+ * caused it. `parts` are quoted individually so the dot in a qualified
+ * column name stays a separator rather than becoming part of the name.
+ */
+function dragProps(...parts: string[]): {
   draggable: true;
   onDragStart: (e: ReactDragEvent<HTMLElement>) => void;
 } {
+  const id = parts.map(quoteIdentifier).join('.');
   return {
     draggable: true,
     onDragStart: (e) => {
@@ -207,6 +236,7 @@ export function SchemaBrowser({
   busy = false,
   onRefresh,
   onSelect,
+  onCopyIdentifier,
   onAction,
   onPluginDdl,
   onNewTable,
@@ -342,6 +372,7 @@ export function SchemaBrowser({
         expanded={expanded.has(entry.table.name) || entry.columnHits.length > 0}
         onToggle={() => toggle(entry.table.name)}
         onSelect={onSelect}
+        onCopyIdentifier={onCopyIdentifier}
         onOpen={onOpen}
         onContextMenu={onAction ? openMenu({ kind: tableKind, target: entry.table }) : undefined}
         onShowDdl={
@@ -529,6 +560,7 @@ export function SchemaBrowser({
                       proc={p}
                       filter={filter}
                       onSelect={onSelect}
+                      onCopyIdentifier={onCopyIdentifier}
                       onOpen={
                         onOpenObject
                           ? () => onOpenObject({ kind: 'procedure', name: p.name })
@@ -573,6 +605,7 @@ export function SchemaBrowser({
                       trigger={t}
                       filter={filter}
                       onSelect={onSelect}
+                      onCopyIdentifier={onCopyIdentifier}
                       onOpen={
                         onOpenObject
                           ? () => onOpenObject({ kind: 'trigger', name: t.name })
@@ -627,6 +660,7 @@ export function SchemaBrowser({
                       gen={g}
                       filter={filter}
                       onSelect={onSelect}
+                      onCopyIdentifier={onCopyIdentifier}
                       onOpen={
                         onOpenObject
                           ? () => onOpenObject({ kind: 'generator', name: g.name })
@@ -682,6 +716,7 @@ export function SchemaBrowser({
                       domain={d}
                       filter={filter}
                       onSelect={onSelect}
+                      onCopyIdentifier={onCopyIdentifier}
                       onOpen={
                         onOpenObject
                           ? () => onOpenObject({ kind: 'domain', name: d.name })
@@ -968,6 +1003,7 @@ interface TableNodeProps {
   expanded: boolean;
   onToggle: () => void;
   onSelect: ((identifier: string) => void) | undefined;
+  onCopyIdentifier: ((identifier: string, label: string) => void) | undefined;
   /** Primary click target. When set, overrides the legacy paste-on-click
    *  behaviour driven by `onSelect`. Tables wire this to "browse rows",
    *  views to "view DDL" — matches DBeaver/DataGrip semantics. */
@@ -984,6 +1020,7 @@ function TableNode({
   expanded,
   onToggle,
   onSelect,
+  onCopyIdentifier,
   onOpen,
   onContextMenu,
   onShowDdl,
@@ -992,12 +1029,18 @@ function TableNode({
   // semantics: tables run a SELECT into the result panel, views/procs/
   // triggers raise the DDL viewer. The legacy `onSelect` paste path
   // stays as the fallback for hosts that haven't migrated yet.
-  const handleNameClick = onOpen ?? (onSelect ? () => onSelect(table.name) : undefined);
+  const handleNameClick =
+    onOpen ??
+    (onCopyIdentifier
+      ? () => onCopyIdentifier(quoteIdentifier(table.name), table.name)
+      : undefined);
+  // Views browse rows exactly as tables do — both shells route either
+  // kind through the same handler — so the old "click to view DDL"
+  // described neither edition. And with the append path gone, a name
+  // with no open handler copies rather than inserting.
   const nameTitle = onOpen
-    ? table.kind === 'view'
-      ? `${table.name} — click to view DDL, drag to insert`
-      : `${table.name} — click to browse rows, drag to insert`
-    : `${table.name} — click to insert, drag into the editor`;
+    ? `${table.name} — click to browse rows, drag into the editor to insert`
+    : `${table.name} — click to copy, drag into the editor to insert`;
   return (
     <div onContextMenu={onContextMenu}>
       <div className="group flex items-center gap-1.5 pl-2 pr-2 transition-colors hover:bg-elevated">
@@ -1047,27 +1090,26 @@ function TableNode({
               key={c.name}
               className="group flex items-center gap-2 py-0.5 pl-9 pr-3 text-fg-muted transition-colors hover:bg-elevated"
             >
-              {onSelect ? (
-                <button
-                  type="button"
-                  onClick={() => onSelect(`${table.name}.${c.name}`)}
-                  className="flex-1 truncate text-left font-mono text-[11px] hover:text-fg"
-                  title={`${table.name}.${c.name}`}
-                  {...dragProps(`${table.name}.${c.name}`)}
-                >
-                  {highlightMatch(c.name, filter)}
-                  {!c.nullable && <span className="ml-0.5 text-danger">*</span>}
-                </button>
-              ) : (
-                <span
-                  className="flex-1 truncate font-mono text-[11px]"
-                  title={c.name}
-                  {...dragProps(`${table.name}.${c.name}`)}
-                >
-                  {highlightMatch(c.name, filter)}
-                  {!c.nullable && <span className="ml-0.5 text-danger">*</span>}
-                </span>
-              )}
+              {/* Clicking copies; it does not type into the editor.
+                  It used to append `TABLE.COLUMN` to whatever the editor
+                  held, so clicking a column while looking at the query
+                  that listed it turned `SELECT * FROM CUSTOMERS` into
+                  `SELECT * FROM CUSTOMERS CUSTOMERS.ID` — the one place
+                  a user is most likely to click was the one place it
+                  reliably produced invalid SQL. Dragging still inserts,
+                  at the point the user drops it. */}
+              <button
+                type="button"
+                onClick={() => {
+                  void onCopyIdentifier?.(quoteIdentifier(c.name), `${table.name}.${c.name}`);
+                }}
+                className="flex-1 truncate text-left font-mono text-[11px] hover:text-fg"
+                title={`${table.name}.${c.name} — click to copy, drag into the editor to insert`}
+                {...dragProps(table.name, c.name)}
+              >
+                {highlightMatch(c.name, filter)}
+                {!c.nullable && <span className="ml-0.5 text-danger">*</span>}
+              </button>
               <span
                 className={`shrink-0 font-mono text-[10px] uppercase ${
                   c.sqlType.includes('[]') ? 'text-warning' : 'text-fg-subtle'
@@ -1095,6 +1137,7 @@ interface LeafNodeProps {
   name: string;
   filter: string;
   onSelect?: ((identifier: string) => void) | undefined;
+  onCopyIdentifier?: ((identifier: string, label: string) => void) | undefined;
   onOpen?: (() => void) | undefined;
   /** Optional right-aligned annotation, e.g. parameter counts or SQL type. */
   hint?: ReactNode;
@@ -1103,7 +1146,16 @@ interface LeafNodeProps {
   onContextMenu?: ((event: ReactMouseEvent<HTMLDivElement>) => void) | undefined;
 }
 
-function LeafNode({ name, filter, onSelect, onOpen, hint, title, onContextMenu }: LeafNodeProps) {
+function LeafNode({
+  name,
+  filter,
+  onSelect,
+  onCopyIdentifier,
+  onOpen,
+  hint,
+  title,
+  onContextMenu,
+}: LeafNodeProps) {
   const inner = (
     <span className="truncate font-mono text-[12px]" title={title ?? name}>
       {highlightMatch(name, filter)}
@@ -1118,7 +1170,9 @@ function LeafNode({ name, filter, onSelect, onOpen, hint, title, onContextMenu }
         // Single click prefers the host-wired open action. Domains have
         // no rows; pasting the bare name into the editor is rarely what
         // the user wants. Drag still inserts the identifier.
-        const handleClick = onOpen ?? (onSelect ? () => onSelect(name) : undefined);
+        const handleClick =
+          onOpen ??
+          (onCopyIdentifier ? () => onCopyIdentifier(quoteIdentifier(name), name) : undefined);
         const tooltip = onOpen
           ? `${title ?? name} — click to view DDL, drag to insert`
           : (title ?? name);
@@ -1149,6 +1203,7 @@ function ProcedureNode({
   proc,
   filter,
   onSelect,
+  onCopyIdentifier,
   onOpen,
   onContextMenu,
   onShowDdl,
@@ -1156,12 +1211,15 @@ function ProcedureNode({
   proc: ProcedureInfo;
   filter: string;
   onSelect?: ((identifier: string) => void) | undefined;
+  onCopyIdentifier?: ((identifier: string, label: string) => void) | undefined;
   onOpen?: (() => void) | undefined;
   onContextMenu?: ((event: ReactMouseEvent<HTMLDivElement>) => void) | undefined;
   onShowDdl?: (() => void) | undefined;
 }) {
   const hint = `${proc.inputCount}→${proc.outputCount}`;
-  const handleNameClick = onOpen ?? (onSelect ? () => onSelect(proc.name) : undefined);
+  const handleNameClick =
+    onOpen ??
+    (onCopyIdentifier ? () => onCopyIdentifier(quoteIdentifier(proc.name), proc.name) : undefined);
   const nameTitle = onOpen ? `${proc.name} — click to view DDL, drag to insert` : proc.name;
   return (
     <div
@@ -1207,6 +1265,7 @@ function TriggerNode({
   trigger,
   filter,
   onSelect,
+  onCopyIdentifier,
   onOpen,
   onContextMenu,
   onToggleActive,
@@ -1215,6 +1274,7 @@ function TriggerNode({
   trigger: TriggerInfo;
   filter: string;
   onSelect?: ((identifier: string) => void) | undefined;
+  onCopyIdentifier?: ((identifier: string, label: string) => void) | undefined;
   onOpen?: (() => void) | undefined;
   onContextMenu?: ((event: ReactMouseEvent<HTMLDivElement>) => void) | undefined;
   onToggleActive?: (() => void) | undefined;
@@ -1232,7 +1292,11 @@ function TriggerNode({
       )}
     </>
   );
-  const handleNameClick = onOpen ?? (onSelect ? () => onSelect(trigger.name) : undefined);
+  const handleNameClick =
+    onOpen ??
+    (onCopyIdentifier
+      ? () => onCopyIdentifier(quoteIdentifier(trigger.name), trigger.name)
+      : undefined);
   const nameTitle = `${trigger.name}${trigger.relation ? ` on ${trigger.relation}` : ''}${
     onOpen ? ' — click to view DDL, drag to insert' : ''
   }`;
@@ -1298,6 +1362,7 @@ function GeneratorNode({
   gen,
   filter,
   onSelect,
+  onCopyIdentifier,
   onOpen,
   onContextMenu,
   onSetValue,
@@ -1305,6 +1370,7 @@ function GeneratorNode({
   gen: GeneratorInfo;
   filter: string;
   onSelect?: ((identifier: string) => void) | undefined;
+  onCopyIdentifier?: ((identifier: string, label: string) => void) | undefined;
   onOpen?: (() => void) | undefined;
   onContextMenu?: ((event: ReactMouseEvent<HTMLDivElement>) => void) | undefined;
   /** Receives the new value as exact decimal text — a generator is a
@@ -1357,7 +1423,11 @@ function GeneratorNode({
         // have no rows to browse and pasting the bare name into the
         // editor is rarely what the user wants. Drag still inserts the
         // identifier; the kebab menu / double-click insert it on demand.
-        const handleClick = onOpen ?? (onSelect ? () => onSelect(gen.name) : undefined);
+        const handleClick =
+          onOpen ??
+          (onCopyIdentifier
+            ? () => onCopyIdentifier(quoteIdentifier(gen.name), gen.name)
+            : undefined);
         const title = onOpen ? `${gen.name} — click to view DDL, drag to insert` : gen.name;
         return handleClick ? (
           <button
@@ -1414,12 +1484,14 @@ function DomainNode({
   domain,
   filter,
   onSelect,
+  onCopyIdentifier,
   onOpen,
   onContextMenu,
 }: {
   domain: DomainInfo;
   filter: string;
   onSelect?: ((identifier: string) => void) | undefined;
+  onCopyIdentifier?: ((identifier: string, label: string) => void) | undefined;
   onOpen?: (() => void) | undefined;
   onContextMenu?: ((event: ReactMouseEvent<HTMLDivElement>) => void) | undefined;
 }) {
