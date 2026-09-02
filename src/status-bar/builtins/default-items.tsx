@@ -32,6 +32,7 @@ import type {
   StatusBarContext,
   StatusBarItemContributionPayload,
 } from '../status-bar-item-contract.js';
+import { copyText } from '../../clipboard.js';
 
 const BUILTIN_NAME = 'status-bar-default-items';
 
@@ -59,7 +60,7 @@ function BuiltinDsnAndCopy({ ctx }: { ctx: StatusBarContext }) {
   const display = `${ctx.user || '—'}@${ctx.host || '—'}:${ctx.port ?? '—'}/${stemOf(ctx.database ?? '')}`;
   const dsn = `firebird://${ctx.user ?? ''}@${ctx.host ?? ''}:${ctx.port ?? ''}/${ctx.database ?? ''}`;
   const handleCopy = () => {
-    void navigator.clipboard.writeText(dsn).catch(() => {});
+    void copyText(dsn);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   };

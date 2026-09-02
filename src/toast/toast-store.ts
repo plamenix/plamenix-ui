@@ -28,6 +28,17 @@ export type Toast =
       statements: { sql: string; durationMs: number; affectedRows?: number | undefined }[];
       totalDurationMs: number;
       createdAt: number;
+    }
+  | {
+      id: string;
+      /** A short confirmation with no statement behind it — a copy
+       *  that worked, or one that could not. Separate from `mutation`
+       *  because nothing here ran against the database, so the
+       *  viewport must not offer "Open in Editor" for it. */
+      kind: 'notice';
+      title: string;
+      tone: 'success' | 'error';
+      createdAt: number;
     };
 
 /** Toast variant minus the bits the store fills in (`id`,
@@ -36,7 +47,8 @@ export type Toast =
  *  variant-specific fields into a single shape. */
 export type ToastInput =
   | Omit<Extract<Toast, { kind: 'mutation' }>, 'id' | 'createdAt'>
-  | Omit<Extract<Toast, { kind: 'mutation-batch' }>, 'id' | 'createdAt'>;
+  | Omit<Extract<Toast, { kind: 'mutation-batch' }>, 'id' | 'createdAt'>
+  | Omit<Extract<Toast, { kind: 'notice' }>, 'id' | 'createdAt'>;
 
 export interface ToastStoreActions {
   push: (toast: ToastInput) => string;
@@ -75,7 +87,6 @@ export const useToastStore = create<ToastStore>()((set, get) => ({
     }
     return id;
   },
-  dismiss: (id) =>
-    set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   clear: () => set({ toasts: [] }),
 }));

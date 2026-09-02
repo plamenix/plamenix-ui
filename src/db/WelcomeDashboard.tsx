@@ -48,6 +48,7 @@ import {
   type FirebirdTip,
 } from './firebird-tips';
 import type { DatabaseStats, Schema } from './generated';
+import { copyText } from '../clipboard.js';
 
 export interface WelcomeDashboardProps {
   sessionId: string;
@@ -302,7 +303,7 @@ function Hero({
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(connectionUri);
+      await copyText(connectionUri);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
     } catch {

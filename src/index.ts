@@ -9,10 +9,7 @@
  * not preemptively.
  */
 
-export {
-  registerAllBuiltins,
-  useBuiltinContributions,
-} from './builtins';
+export { registerAllBuiltins, useBuiltinContributions } from './builtins';
 export { ErrorBoundary, type ErrorBoundaryProps } from './ErrorBoundary';
 export type { Transport } from './transport';
 export { TransportError } from './transport';
@@ -493,6 +490,7 @@ export { AboutButton, type AboutButtonProps } from './about/AboutButton';
 export { AboutPage, type AboutPageProps } from './about/AboutPage';
 export { FilterBuilderModal, type FilterBuilderModalProps } from './db/FilterBuilderModal';
 export { HomeButton, type HomeButtonProps } from './db/HomeButton';
+export { HistoryButton, type HistoryButtonProps } from './db/HistoryButton';
 export { AppMenu, type AppMenuItem, type AppMenuProps } from './db/AppMenu';
 export {
   FirstUsePermissionPrompt,
@@ -668,11 +666,7 @@ export {
   type StatementDecision,
   type StatementIntent,
 } from './db/statement-pipeline';
-export {
-  dispatchSchemaDdl,
-  type DdlDispatchOptions,
-  type DdlTabPatch,
-} from './db/dispatch-ddl';
+export { dispatchSchemaDdl, type DdlDispatchOptions, type DdlTabPatch } from './db/dispatch-ddl';
 export { applySchemaAction, type ApplySchemaActionOptions } from './db/apply-schema-action';
 export {
   useSessionRefreshers,
@@ -774,3 +768,5 @@ export {
 } from './db/TableObjectView';
 export { RoutineObjectView, type RoutineObjectViewProps } from './db/RoutineObjectView';
 export { SqlEditorPage, type SqlEditorPageProps } from './db/SqlEditorPage';
+export { copyText } from './clipboard.js';
+export { historyKeyOf } from './db/history-key.js';

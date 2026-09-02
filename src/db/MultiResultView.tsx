@@ -4,16 +4,8 @@ import { ErrorBanner } from './ErrorBanner';
 import { ResultTable } from './ResultTable';
 import { useDisplayStore } from './display-store';
 import { inferEditableTable } from './inline-edit';
-import {
-  buildFilterPredicate,
-  injectWhereClause,
-  type ColumnFilter,
-} from './filters';
-import {
-  wrapWithSortAndLimit,
-  type OrderBy,
-  type Pagination,
-} from './pagination';
+import { buildFilterPredicate, injectWhereClause, type ColumnFilter } from './filters';
+import { wrapWithSortAndLimit, type OrderBy, type Pagination } from './pagination';
 import type { ColumnInfo, Schema, StatementOutcome } from './types';
 
 export interface MultiResultViewProps {
@@ -37,11 +29,21 @@ export interface MultiResultViewProps {
    *  bulk DELETE/UPDATE toolbar. Resolve to confirm, reject (with a
    *  useful message) to revert the affected cells / rows. */
   onCommitCellEdit?: ((sql: string) => Promise<void>) | undefined;
-  /** Host-side re-run hook for the per-column filter bar. The new
-   *  SQL has the filter predicate spliced into the original `SELECT`;
-   *  the host typically pipes it through the same execute path as a
-   *  manual run so `tab.results` is replaced. */
-  onApplyFilter?: ((sql: string) => Promise<void>) | undefined;
+  /**
+   * Runs a re-composed query for this grid.
+   *
+   * For the filter bar the predicate is spliced into the original
+   * `SELECT`; the host pipes it through the same execute path as a
+   * manual run so `tab.results` is replaced.
+   *
+   * `recordHistory: false` marks a read the user did not ask for — the
+   * automatic re-read after a write. Query history is a record of what
+   * the user ran, and burying that under a machine-issued SELECT after
+   * every saved cell would make it useless.
+   */
+  onApplyFilter?:
+    | ((sql: string, options?: { recordHistory?: boolean }) => Promise<void>)
+    | undefined;
   /** Persisted per-column pixel widths for the result tables. Same
    *  map applies to every outcome card in this view; column names
    *  collide rarely enough that one shared map keeps the UX simple. */
@@ -59,8 +61,10 @@ export interface MultiResultViewProps {
   /** Host-side row fetcher for the G5 db-scope export path. Receives
    *  the scoped table + the active WHERE predicate, returns the rows. */
   onFetchScopedRows?:
-    | ((args: { table: string; predicate: string | null }) =>
-        Promise<{ cells: import('./types').ColumnValue[] }[]>)
+    | ((args: {
+        table: string;
+        predicate: string | null;
+      }) => Promise<{ cells: import('./types').ColumnValue[] }[]>)
     | undefined;
 }
 
@@ -121,7 +125,17 @@ interface StatementCardProps {
   height: number;
   schema: Schema | null;
   onCommitCellEdit?: ((sql: string) => Promise<void>) | undefined;
-  onApplyFilter?: ((sql: string) => Promise<void>) | undefined;
+  /**
+   * Runs a re-composed query for this grid.
+   *
+   * `recordHistory: false` marks a read the user did not ask for — the
+   * automatic re-read after a write. Query history is a record of what
+   * the user ran, and burying that under a machine-issued SELECT after
+   * every saved cell would make it useless.
+   */
+  onApplyFilter?:
+    | ((sql: string, options?: { recordHistory?: boolean }) => Promise<void>)
+    | undefined;
   columnWidths?: Record<string, number> | undefined;
   onColumnWidthsChange?: ((next: Record<string, number>) => void) | undefined;
   onFetchBlob?: ((blobId: string) => Promise<string>) | undefined;
@@ -129,8 +143,10 @@ interface StatementCardProps {
     | ((args: { table: string; predicate: string | null }) => Promise<number>)
     | undefined;
   onFetchScopedRows?:
-    | ((args: { table: string; predicate: string | null }) =>
-        Promise<{ cells: import('./types').ColumnValue[] }[]>)
+    | ((args: {
+        table: string;
+        predicate: string | null;
+      }) => Promise<{ cells: import('./types').ColumnValue[] }[]>)
     | undefined;
 }
 
@@ -179,6 +195,7 @@ function StatementCard({
     nextFilters: ColumnFilter[],
     nextOrder: OrderBy | null,
     nextPage: Pagination | null,
+    options?: { recordHistory?: boolean },
   ) => {
     if (!onApplyFilter) return;
     const infoByName = new Map<string, ColumnInfo>();
@@ -194,7 +211,19 @@ function StatementCard({
         : injectWhereClause(originalSqlRef.current, predicate);
     const sql = wrapWithSortAndLimit(withFilter, nextOrder, nextPage);
     lastFilteredSqlRef.current = sql;
-    void onApplyFilter(sql);
+    void onApplyFilter(sql, options);
+  };
+
+  /**
+   * Re-reads the grid after a write, keeping the view exactly as it is.
+   *
+   * Deliberately reuses the current filter, sort and page rather than
+   * resetting to the first page the way a filter change does: the user
+   * edited a row they were looking at, and moving them somewhere else
+   * as a reward for saving would be its own bug.
+   */
+  const refreshRows = () => {
+    composeAndRun(filters, orderBy, pagination, { recordHistory: false });
   };
 
   const handleFiltersChange = (next: ColumnFilter[]) => {
@@ -244,10 +273,7 @@ function StatementCard({
           </span>
         )}
         <span className="flex-1" />
-        <span
-          className="shrink-0 font-mono text-[10px] text-fg-subtle"
-          title={outcome.sql}
-        >
+        <span className="shrink-0 font-mono text-[10px] text-fg-subtle" title={outcome.sql}>
           {outcome.durationMs.toLocaleString()} ms
         </span>
       </header>
@@ -261,6 +287,7 @@ function StatementCard({
           embedded
           editable={editable}
           onCommit={onCommitCellEdit}
+          onRefreshRows={onApplyFilter ? refreshRows : undefined}
           filters={filters}
           onFiltersChange={onApplyFilter ? handleFiltersChange : undefined}
           columnWidths={columnWidths}
@@ -272,13 +299,10 @@ function StatementCard({
           onPaginationChange={onApplyFilter ? handlePaginationChange : undefined}
           onCountAllRows={
             onCountAllRows && editable
-              ? (predicate) =>
-                  onCountAllRows({ table: editable.table.name, predicate })
+              ? (predicate) => onCountAllRows({ table: editable.table.name, predicate })
               : undefined
           }
-          onFetchScopedRows={
-            onFetchScopedRows && editable ? onFetchScopedRows : undefined
-          }
+          onFetchScopedRows={onFetchScopedRows && editable ? onFetchScopedRows : undefined}
         />
       ) : (
         <div className="bg-canvas p-3">

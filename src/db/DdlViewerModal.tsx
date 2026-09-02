@@ -25,6 +25,7 @@ import {
   type SqlFormatterContributionPayload,
 } from '../formatters/sql-formatter-contract';
 import type { DdlSourceKind } from './schema-actions';
+import { copyText } from '../clipboard.js';
 
 export interface DdlViewerModalProps {
   /** Kind of the object whose source is being shown. `null` collapses
@@ -113,7 +114,7 @@ export function DdlViewerModal({
   };
   const handleCopy = () => {
     if (!body) return;
-    void navigator.clipboard.writeText(body).catch(() => {});
+    void copyText(body);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   };

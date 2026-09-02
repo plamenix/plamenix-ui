@@ -99,6 +99,7 @@ import {
   type EditableContext,
 } from './inline-edit';
 import type { ColumnInfo, ColumnValue, QueryResult } from './types';
+import { copyText } from '../clipboard.js';
 
 export interface ResultTableProps {
   /** Tab the table renders for. Threaded through event emits +
@@ -126,6 +127,21 @@ export interface ResultTableProps {
    *  round-trip; rejects to revert the optimistic state. Used for both
    *  single-cell edits and bulk DELETE/UPDATE on selected rows. */
   onCommit?: ((sql: string) => Promise<void>) | undefined;
+  /**
+   * Re-runs the query behind this grid, keeping the active filter,
+   * sort and page.
+   *
+   * A write only reaches the grid through the optimistic overrides the
+   * table keeps in memory, and those cannot know what the server did:
+   * a `DEFAULT`, a `BEFORE INSERT` trigger, a computed column, or a
+   * generator all settle server-side. An inserted row is worse still —
+   * there is no optimistic entry for it, so the grid simply did not
+   * show it and the user was told to re-run the query themselves.
+   *
+   * Omit to keep the old behaviour, where the grid stays stale until
+   * the user re-runs the statement.
+   */
+  onRefreshRows?: (() => void) | undefined;
   /** Active per-column filters. Controlled by the host (typically
    *  {@link MultiResultView}) so re-renders do not lose state. */
   filters?: ColumnFilter[] | undefined;
@@ -615,6 +631,7 @@ function RowCopyToolbar({
 export function ResultTable({
   tabId,
   sessionId,
+  onRefreshRows,
   result,
   height = 480,
   embedded = false,
@@ -663,6 +680,7 @@ export function ResultTable({
       truncated={truncated ?? false}
       editable={editable}
       onCommit={onCommit}
+      onRefreshRows={onRefreshRows}
       filters={filters}
       onFiltersChange={onFiltersChange}
       columnWidths={columnWidths}
@@ -691,6 +709,9 @@ interface VirtualRowsProps {
   truncated: boolean;
   editable: EditableContext | null;
   onCommit?: ((sql: string) => Promise<void>) | undefined;
+  /** Re-runs the query behind the grid after a write. See
+   *  {@link ResultTableProps.onRefreshRows}. */
+  onRefreshRows?: (() => void) | undefined;
   filters?: ColumnFilter[] | undefined;
   onFiltersChange?: ((next: ColumnFilter[]) => void) | undefined;
   columnWidths?: Record<string, number> | undefined;
@@ -938,6 +959,7 @@ function compileWildcardFilter(pattern: string): RegExp | null {
 }
 
 function VirtualRows({
+  onRefreshRows,
   tabId,
   sessionId,
   columns,
@@ -976,7 +998,7 @@ function VirtualRows({
 
   const handleCopyCell = (rowIdx: number, colIdx: number, cell: ColumnValue) => {
     const text = cellToPlainText(cell);
-    void navigator.clipboard.writeText(text).catch(() => {});
+    void copyText(text);
     setCellCopyFlash({ rowIdx, colIdx });
     window.setTimeout(() => {
       setCellCopyFlash((prev) =>
@@ -1010,7 +1032,7 @@ function VirtualRows({
 
   const handleCopyRow = (rowIdx: number, kind: RowCopyKind) => {
     const text = buildRowText(rowIdx, kind);
-    void navigator.clipboard.writeText(text).catch(() => {});
+    void copyText(text);
     setCopyFlash({ rowIdx, kind });
     window.setTimeout(() => {
       setCopyFlash((prev) => (prev && prev.rowIdx === rowIdx && prev.kind === kind ? null : prev));
@@ -1161,9 +1183,10 @@ function VirtualRows({
     openBlobViewerRef.current = openBlobViewer;
   });
   useEffect(
-    () => setBlobViewer(tableId, (ref, name, rowIdx, colIdx) => {
-      openBlobViewerRef.current(ref, name, rowIdx, colIdx);
-    }),
+    () =>
+      setBlobViewer(tableId, (ref, name, rowIdx, colIdx) => {
+        openBlobViewerRef.current(ref, name, rowIdx, colIdx);
+      }),
     [tableId],
   );
 
@@ -1533,6 +1556,7 @@ function VirtualRows({
       setBulkError(null);
       try {
         await onCommit(sql);
+        onRefreshRows?.();
         // Apply optimistic override to every loaded row that
         // matches the column.
         const colIdx = editable.columnInfoByIndex.findIndex((c) => c?.name === column.name);
@@ -1668,6 +1692,10 @@ function VirtualRows({
         error: undefined,
         defaultApplied,
       });
+      // The override is what the user typed. A DEFAULT, a trigger or a
+      // computed column means the stored value is something else, and
+      // only re-reading shows it.
+      onRefreshRows?.();
       emitCellCommitted({
         tabId,
         sessionId,
@@ -2567,6 +2595,7 @@ function VirtualRows({
                   pkValues,
                 });
                 await onCommit(sql);
+                onRefreshRows?.();
                 setOpenBlob(null);
               }
             : undefined
@@ -2598,9 +2627,17 @@ function VirtualRows({
           table={editable.table}
           onCommit={async (sql) => {
             await onCommit(sql);
+            // Whether the new row is visible depends on the view, not
+            // on the insert: a filter it does not match, a sort that
+            // places it on another page, or a page that is already
+            // full will all hide it. Saying so beats implying the
+            // insert failed.
             setInsertNotice(
-              `Row inserted into ${editable.table.name}. Re-run the query to see it.`,
+              filters && filters.length > 0
+                ? `Row added to ${editable.table.name}. It will not appear here unless it matches the active filter.`
+                : `Row added to ${editable.table.name}.`,
             );
+            onRefreshRows?.();
           }}
           onCancel={() => setRowEditorOpen(false)}
         />

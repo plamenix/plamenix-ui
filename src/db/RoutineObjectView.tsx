@@ -33,6 +33,7 @@ import {
 import { resolveThemeMode, useThemeStore } from '../theme/theme-store';
 import { sqlThemeFor } from './sql-theme';
 import type { DdlSourceKind } from './schema-actions';
+import { copyText } from '../clipboard.js';
 
 export interface RoutineObjectViewProps {
   /** Kind of the object whose source is being shown. */
@@ -90,7 +91,7 @@ export function RoutineObjectView({
   };
   const handleCopy = () => {
     if (!body) return;
-    void navigator.clipboard.writeText(body).catch(() => {});
+    void copyText(body);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   };

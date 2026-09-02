@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { Check, Clipboard, FileTerminal, X } from 'lucide-react';
 import { SqlHighlight } from '../db/SqlHighlight';
 import { useToastStore, type Toast } from './toast-store';
+import { copyText } from '../clipboard.js';
 
 export interface ToastViewportProps {
   /** Called when the user clicks "Open in Editor" on a toast. The
@@ -50,13 +51,39 @@ function ToastCard({
 }) {
   const [copied, setCopied] = useState(false);
 
+  // A notice has no statement behind it, so it gets neither the SQL
+  // body nor the footer — "Open in Editor" on a copied column name
+  // would open an editor holding an identifier and nothing else.
+  if (toast.kind === 'notice') {
+    return (
+      <div className="pointer-events-auto overflow-hidden rounded-lg border border-edge bg-panel shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
+        <div className="flex items-center gap-2 px-3 py-2">
+          {toast.tone === 'success' ? (
+            <Check className="h-3.5 w-3.5 shrink-0 text-success" />
+          ) : (
+            <X className="h-3.5 w-3.5 shrink-0 text-danger" />
+          )}
+          <span className="flex-1 truncate text-[11px] text-fg">{toast.title}</span>
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Dismiss toast"
+            className="rounded p-0.5 text-fg-subtle transition-colors hover:bg-elevated hover:text-fg"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const fullSql =
     toast.kind === 'mutation'
       ? toast.sql
       : toast.statements.map((s) => s.sql.replace(/;?\s*$/, ';')).join('\n\n');
 
   const handleCopy = () => {
-    void navigator.clipboard.writeText(fullSql).catch(() => {});
+    void copyText(fullSql);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   };
@@ -87,11 +114,7 @@ function ToastCard({
           title={copied ? 'Copied!' : 'Copy SQL'}
           className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium text-fg-subtle transition-colors hover:bg-elevated hover:text-fg"
         >
-          {copied ? (
-            <Check className="h-3 w-3 text-success" />
-          ) : (
-            <Clipboard className="h-3 w-3" />
-          )}
+          {copied ? <Check className="h-3 w-3 text-success" /> : <Clipboard className="h-3 w-3" />}
           {copied ? 'Copied' : 'Copy SQL'}
         </button>
         <button
