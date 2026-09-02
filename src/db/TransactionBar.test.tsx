@@ -116,3 +116,68 @@ describe('TransactionBar', () => {
     expect(screen.getByRole('button', { name: /Rollback/ }).hasAttribute('disabled')).toBe(true);
   });
 });
+
+/**
+ * The bar under width pressure.
+ *
+ * Switching to manual mounts four more controls — two selects, Commit,
+ * Rollback — into a toolbar that already holds Format, Stats,
+ * Disconnect and Execute. At a narrow window that no longer fits, and a
+ * flex row does not clip what it cannot fit: every child is squeezed
+ * below its own text, and the text spills across whatever is beside it.
+ * The result was a toolbar with three labels drawn on top of each other.
+ *
+ * jsdom does not lay out, so these assert the properties that stop a
+ * child being squeezed rather than measured widths.
+ */
+describe('under width pressure', () => {
+  const MANUAL: TxStatus = {
+    mode: 'manual',
+    config: { isolation: 'readCommitted', locking: { kind: 'noWait' } },
+    open: false,
+    pendingStatements: 0,
+    startedAt: null,
+  } as TxStatus;
+
+  function renderManual() {
+    return render(
+      <TransactionBar
+        status={MANUAL}
+        onSetMode={vi.fn()}
+        onCommit={vi.fn()}
+        onRollback={vi.fn()}
+      />,
+    );
+  }
+
+  it('refuses to be squeezed by the cluster around it', () => {
+    // Its wrapper is `shrink-0`, but the bar is itself a flex item and
+    // would otherwise inherit the default `shrink: 1`.
+    renderManual();
+    expect(screen.getByTestId('transaction-bar').className).toContain('shrink-0');
+  });
+
+  it('wraps rather than letting its controls collide', () => {
+    renderManual();
+    expect(screen.getByTestId('transaction-bar').className).toContain('flex-wrap');
+  });
+
+  it.each([
+    ['Manual commit', /manual commit/i],
+    ['Commit', /^commit$/i],
+    ['Rollback', /^rollback$/i],
+  ])('keeps %s at its own width', (_label, name) => {
+    renderManual();
+    const button = screen.getByRole('button', { name });
+    expect(button.className).toContain('shrink-0');
+    expect(button.className).toContain('whitespace-nowrap');
+  });
+
+  it.each([
+    ['Isolation level'],
+    ['Lock resolution'],
+  ])('keeps the %s select at its own width', (label) => {
+    renderManual();
+    expect(screen.getByLabelText(label).className).toContain('shrink-0');
+  });
+});

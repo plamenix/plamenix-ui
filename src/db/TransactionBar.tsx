@@ -84,7 +84,10 @@ export function TransactionBar({
   };
 
   return (
-    <div className="flex items-center gap-2 text-[11px]" data-testid="transaction-bar">
+    <div
+      className="flex shrink-0 flex-wrap items-center gap-2 text-[11px]"
+      data-testid="transaction-bar"
+    >
       <button
         type="button"
         onClick={toggleMode}
@@ -96,7 +99,7 @@ export function TransactionBar({
               ? 'Switch to autocommit: each statement commits immediately'
               : 'Switch to manual: statements are held until you commit'
         }
-        className={`rounded border px-2 py-0.5 font-medium transition-colors disabled:opacity-50 ${
+        className={`shrink-0 whitespace-nowrap rounded border px-2 py-0.5 font-medium transition-colors disabled:opacity-50 ${
           manual
             ? 'border-warning bg-warning-subtle text-warning'
             : 'border-edge bg-canvas text-fg-subtle hover:text-fg'
@@ -117,7 +120,7 @@ export function TransactionBar({
                 ? 'Isolation applies to the next transaction'
                 : 'Snapshot gives a stable view but holds it for the whole transaction'
             }
-            className="rounded border border-edge bg-canvas px-1 py-0.5 text-fg-subtle disabled:opacity-50"
+            className="shrink-0 rounded border border-edge bg-canvas px-1 py-0.5 text-fg-subtle disabled:opacity-50"
           >
             {(Object.keys(ISOLATION_LABELS) as TxIsolation[]).map((key) => (
               <option key={key} value={key}>
@@ -136,7 +139,7 @@ export function TransactionBar({
             }
             disabled={busy || open}
             title="On a lock conflict: fail immediately, or wait for the other transaction"
-            className="rounded border border-edge bg-canvas px-1 py-0.5 text-fg-subtle disabled:opacity-50"
+            className="shrink-0 rounded border border-edge bg-canvas px-1 py-0.5 text-fg-subtle disabled:opacity-50"
           >
             <option value="noWait">No wait</option>
             <option value="wait">Wait 10s</option>
@@ -146,7 +149,7 @@ export function TransactionBar({
             type="button"
             onClick={onCommit}
             disabled={busy || !open}
-            className="inline-flex items-center gap-1 rounded border border-success bg-success-subtle px-2 py-0.5 font-medium text-success transition-colors disabled:opacity-40"
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border border-success bg-success-subtle px-2 py-0.5 font-medium text-success transition-colors disabled:opacity-40"
           >
             <Check className="h-3 w-3" /> Commit
           </button>
@@ -154,7 +157,7 @@ export function TransactionBar({
             type="button"
             onClick={onRollback}
             disabled={busy || !open}
-            className="inline-flex items-center gap-1 rounded border border-danger bg-danger-subtle px-2 py-0.5 font-medium text-danger transition-colors disabled:opacity-40"
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border border-danger bg-danger-subtle px-2 py-0.5 font-medium text-danger transition-colors disabled:opacity-40"
           >
             <RotateCcw className="h-3 w-3" /> Rollback
           </button>
@@ -162,7 +165,7 @@ export function TransactionBar({
       )}
 
       <span
-        className={`inline-flex items-center gap-1 font-mono tabular-nums ${
+        className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap font-mono tabular-nums ${
           level === 'stale'
             ? 'text-danger'
             : level === 'lingering'

@@ -36,7 +36,7 @@ export type SessionHealth = 'unknown' | 'healthy' | 'reconnecting' | 'dead';
 function EngineBadge({ version }: { version: string }) {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-md border border-edge bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-muted"
+      className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-edge bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-fg-muted"
       title={`Firebird engine ${version}`}
     >
       <Database className="h-3 w-3" />
@@ -199,7 +199,7 @@ export function QueryPanel({
 
   return (
     <section className="flex flex-col overflow-hidden rounded-lg bg-panel">
-      <header className="flex items-center justify-between gap-3 border-b border-edge bg-canvas px-3 py-2">
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-edge bg-canvas px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <span
             className="truncate font-mono text-[10px] text-fg-subtle"
