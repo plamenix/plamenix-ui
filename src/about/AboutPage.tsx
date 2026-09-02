@@ -10,7 +10,7 @@
 import { ArrowLeft, ExternalLink, Info } from 'lucide-react';
 
 export interface AboutPageProps {
-  /** App version (`1.0.0-beta.0`, etc.). Surfaces at the top of the
+  /** App version (`1.0.0-beta`, etc.). Surfaces at the top of the
    *  page. */
   version: string;
   /** Fires when the user clicks Back. */
