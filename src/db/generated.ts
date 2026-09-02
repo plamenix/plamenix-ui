@@ -87,9 +87,29 @@ export type ColumnValue =
 { type: "null" } | 
 /**  Textual data (CHAR, VARCHAR, BLOB `SUB_TYPE` TEXT). */
 { type: "text"; value: string } | 
-/**  64-bit signed integer (SMALLINT, INTEGER, BIGINT). */
-{ type: "integer"; value: number } | 
-/**  Double-precision floating point (FLOAT, DOUBLE PRECISION). */
+/**
+ *  64-bit signed integer (SMALLINT, INTEGER, BIGINT).
+ * 
+ *  Carried as decimal text: the magnitude is the user's data, and a
+ *  `BIGINT` past 2^53 cannot survive a JSON number. See
+ *  [`plamenix_types::exact_int`].
+ */
+{ type: "integer"; value: string } | 
+/**
+ *  Exact fixed-point value (NUMERIC, DECIMAL).
+ * 
+ *  Carried as decimal text because neither `f64` nor a JSON number
+ *  can hold it: Firebird stores these as a scaled 64-bit integer,
+ *  and NUMERIC(18,4) — the usual money type — runs past what a
+ *  double represents exactly.
+ */
+{ type: "decimal"; value: string } | 
+/**
+ *  Double-precision floating point (FLOAT, DOUBLE PRECISION).
+ * 
+ *  Genuinely approximate, unlike [`Self::Decimal`]: `f64` is the
+ *  faithful representation of what Firebird stores.
+ */
 { type: "float"; value: number | null } | 
 /**  Boolean (FB 3.0+ `BOOLEAN`). */
 { type: "bool"; value: boolean } | 
@@ -162,6 +182,13 @@ export type ConnectionConfig = {
 	 *  unencrypted environments when the user expects an encrypted one.
 	 */
 	encryption_required?: boolean,
+	/**
+	 *  If `true`, attach via Firebird's embedded engine — the
+	 *  `database` field is treated as a local file path; `host` and
+	 *  `port` are ignored. Exclusive access only (no other process may
+	 *  be holding the file open).
+	 */
+	embedded?: boolean,
 };
 
 /**  Encryption state of an attached Firebird database. */
@@ -221,8 +248,11 @@ export type GeneratorInfo = {
 	 *  time. Surfaced by the welcome dashboard and the inline editor in
 	 *  the schema browser. `0` for a freshly created generator that has
 	 *  never been incremented.
+	 * 
+	 *  Carried as decimal text: a Firebird generator is a `BIGINT` and
+	 *  spans the full 64-bit range. See [`exact_int`].
 	 */
-	currentValue: number,
+	currentValue: string,
 };
 
 /**  One entry from the per-profile SQL query history. */
@@ -410,6 +440,13 @@ export type Profile = {
 	 *  see `plamenix_types::ConnectionConfig::charset` for the list.
 	 */
 	charset?: string | null,
+	/**
+	 *  `true` when the profile attaches via Firebird's embedded engine
+	 *  (the `database` field is a local file path; `host`/`port` are
+	 *  ignored). Defaults to `false` so legacy profiles continue to
+	 *  behave as remote-server connections.
+	 */
+	embedded?: boolean,
 };
 
 /**
@@ -605,4 +642,88 @@ export type TriggerInfo = {
 	 *  `RDB$TRIGGER_INACTIVE`).
 	 */
 	active: boolean,
+};
+
+/**  How a session's explicit transactions are started. */
+export type TxConfig = {
+	/**  Isolation level. Defaults to read-committed. */
+	isolation: TxIsolation,
+	/**
+	 *  Lock resolution. Defaults to `NoWait` so the UI reports a
+	 *  conflict instead of blocking on it indefinitely.
+	 */
+	locking: TxLocking,
+};
+
+/**
+ *  Isolation level for an explicit transaction.
+ * 
+ *  Firebird's third level, `consistency` (snapshot table stability), is
+ *  intentionally not offered: it takes table-level locks, so one user
+ *  selecting it from a dropdown can stall a shared server.
+ */
+export type TxIsolation = 
+/**
+ *  Sees other transactions' commits as they happen. The cheapest
+ *  option and the right default for interactive work.
+ */
+"readCommitted" | 
+/**
+ *  A stable view of the database from the moment the transaction
+ *  started — Firebird's `concurrency`. Needed for a consistent
+ *  multi-statement export; holds the snapshot, and therefore the
+ *  oldest active transaction, for as long as it is open.
+ */
+"snapshot";
+
+/**  What a statement does when it hits a lock another transaction holds. */
+export type TxLocking = 
+/**
+ *  Block until the other transaction finishes. With `None` the wait
+ *  is unbounded, which is how an editor ends up frozen on a row
+ *  somebody else is editing.
+ */
+{ kind: "wait"; timeoutSecs: number | null } | 
+/**
+ *  Fail immediately on conflict. Predictable for interactive use,
+ *  and the reason a conflicting statement reports rather than hangs.
+ */
+{ kind: "noWait" };
+
+/**  When a session commits the statements the user runs. */
+export type TxMode = 
+/**
+ *  Commit after every statement. The default, and what a user who
+ *  has not thought about transactions expects.
+ */
+"autocommit" | 
+/**
+ *  Hold statements in one transaction until the user commits or
+ *  rolls back. Nothing is written until they say so — including
+ *  DDL, which Firebird makes transactional.
+ */
+"manual";
+
+/**  A session's current transaction state, as the UI shows it. */
+export type TxStatus = {
+	/**  Autocommit or manual. */
+	mode: TxMode,
+	/**  Settings explicit transactions are started with. */
+	config: TxConfig,
+	/**
+	 *  Whether an explicit transaction is currently open. Always false
+	 *  in autocommit.
+	 */
+	open: boolean,
+	/**
+	 *  Statements run since the transaction opened, so the indicator can
+	 *  say what would be lost to a rollback.
+	 */
+	pendingStatements: number,
+	/**
+	 *  How long the transaction has been open, in milliseconds. The
+	 *  number worth watching: a transaction open for minutes is holding
+	 *  back garbage collection for the whole database.
+	 */
+	ageMs: number,
 };

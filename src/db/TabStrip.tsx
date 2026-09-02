@@ -1,6 +1,19 @@
-import { useState, type DragEvent, type KeyboardEvent } from 'react';
-import { Plus, X } from 'lucide-react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type WheelEvent,
+} from 'react';
+import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
+import { ToolbarSlot } from '../toolbar/ToolbarSlot';
 import type { TabState } from './tabs-store';
+
+/** Per-button ctx the `tabstrip` toolbar slot hands plugins. */
+interface TabStripToolbarCtx {
+  activeTabId: string;
+}
 
 export interface TabStripProps {
   tabs: TabState[];
@@ -38,6 +51,52 @@ export function TabStrip({
 }: TabStripProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
+  /** Horizontal-overflow state for the scrollable tab row. Drives the
+   *  chevron buttons that nudge the row left / right when more tabs
+   *  exist than fit the available width (e.g. tabs pushed behind the
+   *  Home button / app menu on the right). */
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [overflow, setOverflow] = useState<{ left: boolean; right: boolean }>({
+    left: false,
+    right: false,
+  });
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => {
+      setOverflow({
+        left: el.scrollLeft > 0,
+        right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
+      });
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', update);
+      ro.disconnect();
+    };
+  }, [tabs.length]);
+
+  // Vertical wheel → horizontal scroll. Trackpads already deliver
+  // `deltaX`; the conversion only kicks in for mice with a single
+  // vertical wheel so dragging across the tab row feels native there
+  // too.
+  const handleWheel = (e: WheelEvent<HTMLDivElement>) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      el.scrollLeft += e.deltaY;
+    }
+  };
+
+  const nudge = (dir: 1 | -1) => () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * Math.max(160, el.clientWidth * 0.6), behavior: 'smooth' });
+  };
 
   const handleDragStart = (i: number) => (e: DragEvent<HTMLDivElement>) => {
     setDragIndex(i);
@@ -74,36 +133,74 @@ export function TabStrip({
     <div
       role="tablist"
       aria-label="Sessions"
-      className="flex shrink-0 items-end gap-0.5 border-b border-edge bg-inset px-2 pt-2.5"
+      className="flex shrink-0 items-end bg-inset pl-1 pr-2 pt-2.5"
     >
-      {tabs.map((t, i) => (
-        <TabButton
-          key={t.id}
-          tab={t}
-          index={i}
-          active={t.id === activeTabId}
-          draggable={onReorder !== undefined}
-          dragging={dragIndex === i}
-          dropTarget={overIndex === i && dragIndex !== null && dragIndex !== i}
-          onSelect={() => onSelect(t.id)}
-          onClose={() => onClose(t.id)}
-          onDragStart={handleDragStart(i)}
-          onDragOver={handleDragOver(i)}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop(i)}
-          onDragEnd={handleDragEnd}
-          accentColor={accentByTabId?.[t.id]}
-        />
-      ))}
+      {/* + New tab anchored on the far left so it never gets clipped
+          when the tab row overflows behind the Home button / menu on
+          the right. */}
       <button
         type="button"
         onClick={onNew}
         aria-label="New tab"
         title="New tab"
-        className="mb-px ml-0.5 flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-panel hover:text-fg"
+        className="mb-px mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-panel hover:text-fg"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
+      {overflow.left && (
+        <button
+          type="button"
+          onClick={nudge(-1)}
+          aria-label="Scroll tabs left"
+          title="More tabs"
+          className="mb-px mr-1 flex h-7 w-5 shrink-0 items-center justify-center rounded-md bg-panel/80 text-fg-subtle shadow-sm transition-colors hover:bg-panel hover:text-fg"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
+      )}
+      <div
+        ref={scrollRef}
+        onWheel={handleWheel}
+        className="flex min-w-0 flex-1 items-end gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {tabs.map((t, i) => (
+          <TabButton
+            key={t.id}
+            tab={t}
+            index={i}
+            active={t.id === activeTabId}
+            draggable={onReorder !== undefined}
+            dragging={dragIndex === i}
+            dropTarget={overIndex === i && dragIndex !== null && dragIndex !== i}
+            onSelect={() => onSelect(t.id)}
+            onClose={() => onClose(t.id)}
+            onDragStart={handleDragStart(i)}
+            onDragOver={handleDragOver(i)}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop(i)}
+            onDragEnd={handleDragEnd}
+            accentColor={accentByTabId?.[t.id]}
+          />
+        ))}
+        {/* I5.3 — plugin-contributed tab-strip toolbar buttons live
+            inside the scrolling row so they scroll with the tabs they
+            decorate. */}
+        <ToolbarSlot<TabStripToolbarCtx>
+          location="tabstrip"
+          ctx={{ activeTabId }}
+        />
+      </div>
+      {overflow.right && (
+        <button
+          type="button"
+          onClick={nudge(1)}
+          aria-label="Scroll tabs right"
+          title="More tabs"
+          className="mb-px ml-1 flex h-7 w-5 shrink-0 items-center justify-center rounded-md bg-panel/80 text-fg-subtle shadow-sm transition-colors hover:bg-panel hover:text-fg"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }

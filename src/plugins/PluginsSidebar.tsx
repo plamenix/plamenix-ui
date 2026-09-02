@@ -97,9 +97,7 @@ function PluginRow({
               <span className="break-words">{plugin.activation.message}</span>
             </div>
           )}
-          {plugin.sidebarPanels.length === 0 ? (
-            <p className="px-3 py-2 text-[11px] italic text-fg-subtle">No contributions.</p>
-          ) : (
+          {plugin.sidebarPanels.length > 0 && (
             <ul>
               {plugin.sidebarPanels.map((panel) => {
                 const Icon = resolveIcon(panel.icon);
@@ -118,6 +116,24 @@ function PluginRow({
               })}
             </ul>
           )}
+          {plugin.extensions && plugin.extensions.length > 0 && (
+            <ul className="border-t border-edge-subtle">
+              {plugin.extensions.map((ext) => (
+                <li
+                  key={ext.point}
+                  className="flex items-center gap-2 px-3 py-1 text-[11px] text-fg-subtle"
+                >
+                  <Sparkles className="h-3 w-3 shrink-0 text-accent/60" />
+                  <span className="truncate font-mono">{ext.point}</span>
+                  <span className="ml-auto font-mono">×{ext.count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {plugin.sidebarPanels.length === 0 &&
+            (!plugin.extensions || plugin.extensions.length === 0) && (
+              <p className="px-3 py-2 text-[11px] italic text-fg-subtle">No contributions.</p>
+            )}
         </div>
       )}
     </div>

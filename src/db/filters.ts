@@ -19,10 +19,13 @@
 
 import type { ColumnInfo } from './types';
 
-/** Operators the column-filter popover exposes. The right-hand side
- *  varies: NULL-check operators carry no value; LIKE/NOT LIKE always
- *  treat the value as text; comparison operators take the column's
- *  declared type into account. */
+/** Operators the column-filter popover exposes. Mix of standard SQL
+ *  and Firebird-specific shapes: `STARTING WITH`, `CONTAINING`,
+ *  `SIMILAR TO`, `NOT CONTAINING`, `NOT STARTING WITH`,
+ *  `NOT SIMILAR TO` are Firebird-specific. NULL-check operators
+ *  carry no value. `LIKE`/`CONTAINING`/`SIMILAR TO`/`STARTING WITH`
+ *  treat the value as text. Comparison + `BETWEEN`/`IN` operators
+ *  consult the column's declared type. */
 export type FilterOperator =
   | '='
   | '<>'
@@ -33,10 +36,21 @@ export type FilterOperator =
   | 'LIKE'
   | 'NOT LIKE'
   | 'CONTAINING'
+  | 'NOT CONTAINING'
+  | 'STARTING WITH'
+  | 'NOT STARTING WITH'
+  | 'SIMILAR TO'
+  | 'NOT SIMILAR TO'
+  | 'BETWEEN'
+  | 'NOT BETWEEN'
+  | 'IN'
+  | 'NOT IN'
   | 'IS NULL'
   | 'IS NOT NULL';
 
-/** All operators in display order. */
+/** All operators in display order. Grouping: comparison first,
+ *  pattern matching second, range + set membership third, NULL checks
+ *  last. */
 export const FILTER_OPERATORS: FilterOperator[] = [
   '=',
   '<>',
@@ -47,9 +61,41 @@ export const FILTER_OPERATORS: FilterOperator[] = [
   'LIKE',
   'NOT LIKE',
   'CONTAINING',
+  'NOT CONTAINING',
+  'STARTING WITH',
+  'NOT STARTING WITH',
+  'SIMILAR TO',
+  'NOT SIMILAR TO',
+  'BETWEEN',
+  'NOT BETWEEN',
+  'IN',
+  'NOT IN',
   'IS NULL',
   'IS NOT NULL',
 ];
+
+const TEXT_OPERATORS: ReadonlySet<FilterOperator> = new Set<FilterOperator>([
+  'LIKE',
+  'NOT LIKE',
+  'CONTAINING',
+  'NOT CONTAINING',
+  'STARTING WITH',
+  'NOT STARTING WITH',
+  'SIMILAR TO',
+  'NOT SIMILAR TO',
+]);
+
+/** `true` when the operator emits its right-hand side as two values
+ *  separated by `AND` (Firebird `BETWEEN x AND y`). */
+export function operatorIsBetween(op: FilterOperator): boolean {
+  return op === 'BETWEEN' || op === 'NOT BETWEEN';
+}
+
+/** `true` when the operator emits its right-hand side as a
+ *  parenthesised, comma-separated list (`IN (a, b, c)`). */
+export function operatorIsInList(op: FilterOperator): boolean {
+  return op === 'IN' || op === 'NOT IN';
+}
 
 export interface ColumnFilter {
   /** Result-column name as Firebird reports it. */
@@ -111,11 +157,68 @@ function renderFilter(filter: ColumnFilter, info: ColumnInfo | null): string | n
     return `${ident} ${filter.operator}`;
   }
   if (filter.value.length === 0) return null;
+  if (operatorIsBetween(filter.operator)) {
+    const parts = splitTopLevel(filter.value, ',').map((s) => s.trim());
+    if (parts.length !== 2 || parts[0] === '' || parts[1] === '') return null;
+    const lo = renderScalarLiteral(parts[0]!, info);
+    const hi = renderScalarLiteral(parts[1]!, info);
+    return `${ident} ${filter.operator} ${lo} AND ${hi}`;
+  }
+  if (operatorIsInList(filter.operator)) {
+    const items = splitTopLevel(filter.value, ',').map((s) => s.trim()).filter((s) => s !== '');
+    if (items.length === 0) return null;
+    const rendered = items.map((v) => renderScalarLiteral(v, info)).join(', ');
+    return `${ident} ${filter.operator} (${rendered})`;
+  }
   const literal = renderLiteral(filter.value, filter.operator, info);
   return `${ident} ${filter.operator} ${literal}`;
 }
 
-/** Quotes a value as the right-hand side of a filter. LIKE/NOT LIKE
+/** Splits `value` on `sep` at depth-0 only (paren-aware). Quotes are
+ *  NOT treated as string-literal delimiters — the input is raw user
+ *  text, not SQL, so an apostrophe in `O'Brien,Smith` does not
+ *  suppress the comma split. */
+function splitTopLevel(value: string, sep: ','): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let buf = '';
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+    if (ch === '(') depth += 1;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    if (ch === sep && depth === 0) {
+      parts.push(buf);
+      buf = '';
+      continue;
+    }
+    buf += ch;
+  }
+  parts.push(buf);
+  return parts;
+}
+
+/** Type-aware scalar literal — shared by `IN` and `BETWEEN` so each
+ *  list entry honours numeric / boolean quoting rules. */
+function renderScalarLiteral(value: string, info: ColumnInfo | null): string {
+  if (!info) return quoteString(value);
+  const sqlType = info.sqlType.toUpperCase();
+  if (sqlType === 'BOOLEAN') {
+    const lower = value.trim().toLowerCase();
+    if (['true', 't', '1', 'yes', 'y'].includes(lower)) return 'TRUE';
+    if (['false', 'f', '0', 'no', 'n'].includes(lower)) return 'FALSE';
+    return quoteString(value);
+  }
+  if (isNumericType(sqlType)) {
+    const trimmed = value.trim();
+    if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(trimmed)) {
+      return trimmed;
+    }
+    return quoteString(value);
+  }
+  return quoteString(value);
+}
+
+/** Quotes a value as the right-hand side of a filter. Text operators
  *  always emit a string literal; comparison operators consult the
  *  column type. */
 function renderLiteral(
@@ -123,7 +226,7 @@ function renderLiteral(
   op: FilterOperator,
   info: ColumnInfo | null,
 ): string {
-  if (op === 'LIKE' || op === 'NOT LIKE' || op === 'CONTAINING') {
+  if (TEXT_OPERATORS.has(op)) {
     return quoteString(value);
   }
   if (!info) return quoteString(value);

@@ -29,12 +29,13 @@ import { ErrorBanner } from './ErrorBanner';
 import { ACCENT_COLORS, type AccentId } from '../theme/accent-colors';
 import { useResolvedThemeMode } from '../theme/theme-store';
 import { applySettings, parseSettings } from '../settings-io';
-import type {
-  ConnectionForm,
-  ListAliasesResult,
-  Profile,
-  TestConnectionResult,
-} from './types';
+import { usePluginContributions } from '../plugin-react/usePluginContributions';
+import {
+  pluginContributionsToAuthProviders,
+  type AuthProviderContributionPayload,
+  type AuthProviderFormContext,
+} from '../auth/auth-provider-contract';
+import type { ConnectionForm, ListAliasesResult, Profile, TestConnectionResult } from './types';
 import { SUPPORTED_CHARSETS } from './types';
 
 /** Props for {@link ConnectionScreen}. The component is purely
@@ -81,6 +82,10 @@ export interface ConnectionScreenProps {
    *  they cancel. Web edition omits this and only ships the text
    *  input. */
   onBrowseFbclient?: () => Promise<string | null>;
+  /** Opens a native file picker filtered to `.fdb` and returns the
+   *  selected path, or `null` when the user cancels. Surfaces in
+   *  embedded mode as a Browse button next to the database field. */
+  onBrowseDatabase?: () => Promise<string | null>;
   /** Fetches the Firebird client library for the host platform and
    *  the supplied version label (e.g. `"5.0.3"`). Resolves with the
    *  installed path. `version === undefined` means "latest known
@@ -101,10 +106,9 @@ export interface ConnectionScreenProps {
 }
 
 const INPUT_CLASS =
-  'w-full rounded-lg border border-edge bg-inset px-3 py-2 text-sm text-fg placeholder:text-fg-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
+  'w-full rounded-lg border border-edge bg-inset px-3 py-1.5 text-[13px] text-fg placeholder:text-fg-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
 
-const LABEL_CLASS =
-  'mb-1 block text-[11px] font-medium uppercase tracking-wide text-fg-muted';
+const LABEL_CLASS = 'mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-fg-muted';
 
 /** Pill for the EPF-folder status row. Green tick when found, amber
  *  shield when not. */
@@ -117,11 +121,7 @@ function EpfChip({ label, ok }: { label: string; ok: boolean }) {
           : 'border-warning/30 bg-warning-subtle text-warning'
       }`}
     >
-      {ok ? (
-        <ShieldCheck className="h-2.5 w-2.5" />
-      ) : (
-        <ShieldAlert className="h-2.5 w-2.5" />
-      )}
+      {ok ? <ShieldCheck className="h-2.5 w-2.5" /> : <ShieldAlert className="h-2.5 w-2.5" />}
       {label}
     </span>
   );
@@ -193,13 +193,42 @@ export function ConnectionScreen({
   onTest,
   onListAliases,
   onBrowseFbclient,
+  onBrowseDatabase,
   onDownloadFbclient,
   fbclientReleases = null,
   onBrowseFbclientDir,
 }: ConnectionScreenProps) {
   const [search, setSearch] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [profileModeTab, setProfileModeTab] = useState<'server' | 'embedded'>('server');
+  // Keep the profile filter tab in sync with the form's mode so the
+  // list shows relevant profiles when the user toggles the mode tabs
+  // at the top of the form.
+  useEffect(() => {
+    setProfileModeTab(form.embedded ? 'embedded' : 'server');
+  }, [form.embedded]);
   const [showEncKey, setShowEncKey] = useState(false);
+
+  // I5.7 — register the built-in password auth provider through the
+  // shared registry. Single mount per ConnectionScreen render cycle;
+  // teardown on unmount.
+
+  const authProviderContributions =
+    usePluginContributions<AuthProviderContributionPayload>('auth_providers');
+  const authProviders = useMemo(
+    () => pluginContributionsToAuthProviders(authProviderContributions),
+    [authProviderContributions],
+  );
+  const [activeAuthProviderId, setActiveAuthProviderId] = useState<string | null>(null);
+  const resolvedAuthProviderId =
+    activeAuthProviderId && authProviders.some((p) => p.id === activeAuthProviderId)
+      ? activeAuthProviderId
+      : (authProviders[0]?.id ?? null);
+  const activeAuthProvider = authProviders.find((p) => p.id === resolvedAuthProviderId) ?? null;
+  const authFormCtx = useMemo<AuthProviderFormContext>(() => {
+    const ctx: AuthProviderFormContext = { form, onChange, busy };
+    if (passwordHint !== undefined) ctx.passwordHint = passwordHint;
+    return ctx;
+  }, [form, onChange, busy, passwordHint]);
   const [aliasOpen, setAliasOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // Surfaces a small "N changed" hint on the Advanced button so the
@@ -223,9 +252,9 @@ export function ConnectionScreen({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [advancedOpen]);
-  const [fbclientBusy, setFbclientBusy] = useState<
-    'browse' | 'browse-dir' | 'download' | null
-  >(null);
+  const [fbclientBusy, setFbclientBusy] = useState<'browse' | 'browse-dir' | 'download' | null>(
+    null,
+  );
   const [fbclientError, setFbclientError] = useState<string | null>(null);
   const [epfStatus, setEpfStatus] = useState<{
     hasFbcrypt: boolean;
@@ -275,10 +304,22 @@ export function ConnectionScreen({
     if (aliasesData === null && !aliasesLoading) onListAliases();
   };
 
+  const profileCounts = useMemo(() => {
+    let server = 0;
+    let embedded = 0;
+    for (const p of profiles) {
+      if (p.embedded) embedded += 1;
+      else server += 1;
+    }
+    return { server, embedded };
+  }, [profiles]);
   const filtered = useMemo(() => {
+    const inMode = profiles.filter((p) =>
+      profileModeTab === 'embedded' ? p.embedded === true : !p.embedded,
+    );
     const base = !search
-      ? profiles
-      : profiles.filter((p) => {
+      ? inMode
+      : inMode.filter((p) => {
           const q = search.toLowerCase();
           return (
             p.name.toLowerCase().includes(q) ||
@@ -297,7 +338,7 @@ export function ConnectionScreen({
       const tb = mostRecentTouch(b) ?? b.createdAt ?? 0;
       return tb - ta;
     });
-  }, [profiles, search]);
+  }, [profiles, search, profileModeTab]);
 
   const isCurrentSaved = profiles.some(
     (p) =>
@@ -314,7 +355,7 @@ export function ConnectionScreen({
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-canvas">
-      <div className="grid flex-1 grid-cols-[40%_60%] overflow-hidden bg-panel">
+      <div className="grid min-h-0 flex-1 grid-cols-[40%_60%] overflow-hidden bg-panel">
         {/* Left: saved profiles */}
         <div className="relative overflow-hidden border-r border-edge bg-canvas">
           <div className="absolute inset-0 flex flex-col overflow-hidden">
@@ -334,6 +375,44 @@ export function ConnectionScreen({
                     onChange={(e) => setSearch(e.target.value)}
                     className="w-full rounded-lg border border-edge bg-inset py-1.5 pl-8 pr-3 text-xs text-fg placeholder:text-fg-subtle transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
                   />
+                </div>
+                <div
+                  role="tablist"
+                  aria-label="Profile mode filter"
+                  className="mt-2 flex gap-1 rounded-lg border border-edge bg-inset p-0.5"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={profileModeTab === 'server'}
+                    onClick={() => setProfileModeTab('server')}
+                    className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                      profileModeTab === 'server'
+                        ? 'bg-accent text-canvas shadow-sm'
+                        : 'text-fg-subtle hover:bg-elevated hover:text-fg'
+                    }`}
+                  >
+                    Server
+                    <span className="ml-1 font-mono text-[9px] opacity-70">
+                      {profileCounts.server}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={profileModeTab === 'embedded'}
+                    onClick={() => setProfileModeTab('embedded')}
+                    className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                      profileModeTab === 'embedded'
+                        ? 'bg-accent text-canvas shadow-sm'
+                        : 'text-fg-subtle hover:bg-elevated hover:text-fg'
+                    }`}
+                  >
+                    Embedded
+                    <span className="ml-1 font-mono text-[9px] opacity-70">
+                      {profileCounts.embedded}
+                    </span>
+                  </button>
                 </div>
               </div>
             )}
@@ -464,319 +543,403 @@ export function ConnectionScreen({
           </div>
         </div>
 
-        {/* Right: connect form */}
-        <div className="flex flex-col overflow-y-auto bg-panel">
-          <form
-            onSubmit={handleSubmit}
-            className="mx-auto flex w-full max-w-[640px] flex-col px-8 py-8"
-          >
-            <div className="mb-7 flex items-center gap-3">
-              <BrandIcon className="h-10 w-10" title="Plamenix" />
-              <div>
-                <h1 className="text-lg font-semibold text-fg">
-                  Plamenix <span className="text-accent">Firebird IDE</span>
-                </h1>
-                <p className="text-xs text-fg-muted">Enter connection details</p>
-              </div>
-            </div>
-
-            {error && (
-              <div className="mb-4">
-                <ErrorBanner error={error} compact />
-              </div>
-            )}
-
-            <div className="space-y-3.5">
-              <div>
-                <label className={LABEL_CLASS}>
-                  Profile Name{' '}
-                  <span className="font-normal normal-case text-fg-subtle">(for save)</span>
-                </label>
-                <input
-                  type="text"
-                  value={profileName}
-                  onChange={(e) => onProfileNameChange(e.target.value)}
-                  placeholder="e.g. Production DB, Local Dev…"
-                  className={INPUT_CLASS}
-                />
-                {onProfileColorChange && (
-                  <ColorPicker value={profileColor ?? null} onChange={onProfileColorChange} />
-                )}
-              </div>
-
-              <div className="flex gap-3">
-                <div className="w-[240px] shrink-0">
-                  <label className={LABEL_CLASS}>Host</label>
-                  <input
-                    type="text"
-                    value={form.host}
-                    onChange={(e) => onChange('host', e.target.value)}
-                    className={INPUT_CLASS}
-                    required
-                  />
-                </div>
-                <div className="w-[88px] shrink-0">
-                  <label className={LABEL_CLASS}>Port</label>
-                  <input
-                    type="number"
-                    value={form.port}
-                    onChange={(e) => onChange('port', Number(e.target.value))}
-                    className={INPUT_CLASS}
-                    required
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <label className={LABEL_CLASS}>
-                    Charset{' '}
-                    <span className="font-normal normal-case text-fg-subtle">(wire)</span>
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={form.charset}
-                      onChange={(e) => onChange('charset', e.target.value)}
-                      className={`${INPUT_CLASS} appearance-none pr-9`}
-                      title="Wire-protocol encoding"
-                    >
-                      {SUPPORTED_CHARSETS.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      aria-hidden
-                      className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle"
-                    />
-                  </div>
+        {/* Right: connect form.
+            The pane itself does not scroll — the fields do, and the
+            action bar is pinned below them. Scrolling the whole pane put
+            Connect and Save off-screen at ordinary window heights, so
+            the screen's primary action was reachable only by scrolling
+            to find it. */}
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-col overflow-hidden bg-panel">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto flex w-full max-w-[640px] flex-col px-8 py-8">
+              <div className="mb-7 flex items-center gap-3">
+                <BrandIcon className="h-10 w-10" title="Plamenix" />
+                <div>
+                  <h1 className="text-lg font-semibold text-fg">
+                    Plamenix <span className="text-accent">Firebird IDE</span>
+                  </h1>
+                  <p className="text-xs text-fg-muted">Enter connection details</p>
                 </div>
               </div>
 
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className={LABEL_CLASS}>Username</label>
-                  <input
-                    type="text"
-                    value={form.user}
-                    onChange={(e) => onChange('user', e.target.value)}
-                    className={INPUT_CLASS}
-                    required
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className={LABEL_CLASS}>Password</label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={form.password}
-                      onChange={(e) => onChange('password', e.target.value)}
-                      className={`${INPUT_CLASS} pr-9`}
-                    />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-subtle transition-colors hover:text-fg-muted"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-3.5 w-3.5" />
-                      ) : (
-                        <Eye className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
-                  {passwordHint && (
-                    <p className="mt-1 text-[10px] text-fg-subtle">{passwordHint}</p>
-                  )}
-                </div>
-              </div>
-
-              {onTest && (
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={onTest}
-                    disabled={testing || busy || !form.host}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-accent transition-colors hover:text-accent-hover disabled:opacity-40"
-                  >
-                    {testing ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Zap className="h-3 w-3" />
-                    )}
-                    Test Connection
-                  </button>
-                  {testResult && !testing && (
-                    <span
-                      className={`flex items-center gap-1.5 text-xs ${
-                        testResult.ok ? 'text-success' : 'text-danger'
-                      }`}
-                    >
-                      {testResult.ok ? (
-                        <CheckCircle2 className="h-3 w-3" />
-                      ) : (
-                        <XCircle className="h-3 w-3" />
-                      )}
-                      <span className="truncate">
-                        {testResult.ok
-                          ? `Connected — Firebird ${testResult.firebirdVersion ?? '?'} (${testResult.durationMs} ms)`
-                          : testResult.error}
-                      </span>
-                    </span>
-                  )}
+              {error && (
+                <div className="mb-4">
+                  <ErrorBanner error={error} compact />
                 </div>
               )}
 
-              <div className="relative">
-                <div className="mb-1 flex items-center justify-between">
-                  <label className="block text-[11px] font-medium uppercase tracking-wide text-fg-muted">
-                    Database Path or Alias
-                  </label>
-                  {onListAliases && (
-                    <button
-                      ref={aliasBtnRef}
-                      type="button"
-                      onClick={() => (aliasOpen ? setAliasOpen(false) : openAliases())}
-                      className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-fg-subtle transition-colors hover:text-accent"
-                      title="Browse databases.conf aliases"
-                    >
-                      <ListTree className="h-3 w-3" />
-                      Aliases
-                    </button>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  value={form.database}
-                  onChange={(e) => onChange('database', e.target.value)}
-                  placeholder="/path/to/database.fdb or alias"
-                  className={INPUT_CLASS}
-                />
-                {aliasOpen && (
-                  <div
-                    ref={aliasPopRef}
-                    role="dialog"
-                    aria-label="databases.conf aliases"
-                    className="absolute right-0 top-full z-30 mt-1 w-80 overflow-hidden rounded-lg border border-edge bg-panel shadow-[0_12px_40px_rgba(0,0,0,0.25)]"
-                  >
-                    <header className="flex items-center justify-between border-b border-edge bg-canvas px-3 py-2">
-                      <div className="flex items-center gap-2 text-[11px] text-fg-muted">
-                        <ListTree className="h-3 w-3 text-fg-subtle" />
-                        <span className="font-semibold">databases.conf</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setAliasOpen(false)}
-                        aria-label="Close aliases"
-                        className="rounded p-0.5 text-fg-subtle transition-colors hover:bg-elevated hover:text-fg"
-                      >
-                        <XCircle className="h-3 w-3" />
-                      </button>
-                    </header>
-                    {aliasesData?.sourcePath && (
-                      <div
-                        className="truncate border-b border-edge bg-inset px-3 py-1.5 font-mono text-[10px] text-fg-subtle"
-                        title={aliasesData.sourcePath}
-                      >
-                        {aliasesData.sourcePath}
-                      </div>
-                    )}
-                    <div className="max-h-60 overflow-y-auto py-1">
-                      {aliasesLoading ? (
-                        <div className="flex items-center justify-center gap-2 px-3 py-6 text-xs text-fg-subtle">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          Reading databases.conf…
-                        </div>
-                      ) : !aliasesData || aliasesData.aliases.length === 0 ? (
-                        <p className="px-3 py-5 text-center text-xs text-fg-subtle">
-                          {aliasesData?.sourcePath
-                            ? 'No aliases defined.'
-                            : 'No databases.conf found on this host.'}
-                        </p>
-                      ) : (
-                        aliasesData.aliases.map((a) => (
-                          <button
-                            key={a.alias}
-                            type="button"
-                            onClick={() => {
-                              onChange('database', a.alias);
-                              setAliasOpen(false);
-                            }}
-                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-elevated"
-                          >
-                            <Database className="h-3 w-3 shrink-0 text-fg-subtle" />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate font-mono text-[12px] text-fg">
-                                {a.alias}
-                              </div>
-                              <div
-                                className="truncate font-mono text-[10px] text-fg-subtle"
-                                title={a.path}
-                              >
-                                {a.path}
-                              </div>
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
+              <div
+                role="tablist"
+                aria-label="Connection mode"
+                className="mb-4 flex gap-1 rounded-lg border border-edge bg-canvas p-1"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={!form.embedded}
+                  onClick={() => onChange('embedded', false)}
+                  className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    !form.embedded
+                      ? 'bg-accent text-canvas shadow-sm'
+                      : 'text-fg-subtle hover:bg-elevated hover:text-fg'
+                  }`}
+                >
+                  Server mode
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={form.embedded}
+                  onClick={() => {
+                    onChange('embedded', true);
+                    onChange('pureRust', false);
+                  }}
+                  className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    form.embedded
+                      ? 'bg-accent text-canvas shadow-sm'
+                      : 'text-fg-subtle hover:bg-elevated hover:text-fg'
+                  }`}
+                  title="Attach via Firebird's embedded engine — exclusive local file access, no host/port/password needed"
+                >
+                  Embedded mode
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setAdvancedOpen(true)}
-                className="group flex w-full items-center gap-3 rounded-lg border border-edge bg-canvas px-3 py-2.5 text-left transition-colors hover:border-accent/40 hover:bg-elevated"
-              >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-subtle text-accent">
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
-                </span>
-                <span className="flex-1">
-                  <span className="block text-[12px] font-semibold text-fg">Advanced settings</span>
-                  <span className="block truncate text-[10px] text-fg-subtle">
-                    Encryption · Pure-Rust · fbclient · charset
-                    {advancedTouched > 0 && (
-                      <span className="ml-1 text-accent">· {advancedTouched} changed</span>
-                    )}
-                  </span>
-                </span>
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-fg-subtle transition-transform group-hover:translate-x-0.5 group-hover:text-fg" />
-              </button>
-            </div>
+              <div className="space-y-3.5">
+                <div>
+                  <label className={LABEL_CLASS}>
+                    Profile Name{' '}
+                    <span className="font-normal normal-case text-fg-subtle">(for save)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={profileName}
+                    onChange={(e) => onProfileNameChange(e.target.value)}
+                    placeholder="e.g. Production DB, Local Dev…"
+                    className={INPUT_CLASS}
+                  />
+                  {onProfileColorChange && (
+                    <ColorPicker value={profileColor ?? null} onChange={onProfileColorChange} />
+                  )}
+                </div>
 
-            <div className="mt-5 flex gap-2 border-t border-edge pt-4">
-              <button
-                type="button"
-                title={isCurrentSaved ? 'Profile saved' : 'Save profile'}
-                onClick={onSaveProfile}
-                disabled={busy || profileName.trim() === ''}
-                className={`flex items-center gap-1.5 rounded-lg border px-3.5 py-2.5 text-sm font-medium transition-all disabled:opacity-50 ${
-                  isCurrentSaved
-                    ? 'border-accent/30 bg-accent-subtle text-accent'
-                    : 'border-edge text-fg-muted hover:bg-elevated hover:text-fg'
-                }`}
-              >
-                <Star className={`h-3.5 w-3.5 ${isCurrentSaved ? 'fill-current' : ''}`} />
-                <span className="text-xs">{isCurrentSaved ? 'Saved' : 'Save'}</span>
-              </button>
-              <button
-                type="submit"
-                disabled={busy}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent py-2.5 text-sm font-medium text-fg-inverted shadow-sm transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {busy ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Connecting…
-                  </>
-                ) : (
-                  'Connect'
+                <div className="flex gap-3">
+                  {!form.embedded && (
+                    <>
+                      <div className="w-[240px] shrink-0">
+                        <label className={LABEL_CLASS}>Host</label>
+                        <input
+                          type="text"
+                          value={form.host}
+                          onChange={(e) => onChange('host', e.target.value)}
+                          className={INPUT_CLASS}
+                          required
+                        />
+                      </div>
+                      <div className="w-[88px] shrink-0">
+                        <label className={LABEL_CLASS}>Port</label>
+                        <input
+                          type="number"
+                          value={form.port}
+                          onChange={(e) => onChange('port', Number(e.target.value))}
+                          className={INPUT_CLASS}
+                          required
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <label className={LABEL_CLASS}>
+                      Charset <span className="font-normal normal-case text-fg-subtle">(wire)</span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={form.charset}
+                        onChange={(e) => onChange('charset', e.target.value)}
+                        className={`${INPUT_CLASS} appearance-none pr-9`}
+                        title="Wire-protocol encoding"
+                      >
+                        {SUPPORTED_CHARSETS.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        aria-hidden
+                        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* I5.7 — auth provider tabs (only render when >1
+                  provider registered) + the active provider's
+                  FormComponent in place of the legacy inline
+                  Username/Password block. The built-in password
+                  provider renders the same pre-I5.7 markup with the
+                  show/hide toggle, so the single-provider case is
+                  visually identical to the pre-section layout. */}
+                {authProviders.length > 1 && (
+                  <div
+                    role="tablist"
+                    aria-label="Authentication method"
+                    className="flex items-center gap-1 border-b border-edge"
+                  >
+                    {authProviders.map((p) => {
+                      const active = p.id === resolvedAuthProviderId;
+                      const Icon = p.icon;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={active}
+                          onClick={() => setActiveAuthProviderId(p.id)}
+                          className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-xs font-medium transition-colors ${
+                            active
+                              ? 'border-accent text-accent'
+                              : 'border-transparent text-fg-muted hover:text-fg'
+                          }`}
+                        >
+                          {Icon && <Icon className="h-3.5 w-3.5" />}
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
-              </button>
+                {activeAuthProvider && <activeAuthProvider.FormComponent ctx={authFormCtx} />}
+                {form.embedded && (
+                  <div className="rounded-md border border-edge bg-canvas px-3 py-2.5 text-[11px] text-fg-muted">
+                    <span className="font-semibold text-fg">Embedded mode:</span> attaches via
+                    Firebird's in-process engine using the <span className="font-mono">.fdb</span>{' '}
+                    file directly. Username is honored (recorded in{' '}
+                    <span className="font-mono">MON$ATTACHMENTS</span>); whether the password is
+                    enforced depends on the engine's <span className="font-mono">AuthServer</span>{' '}
+                    config in <span className="font-mono">firebird.conf</span>.
+                  </div>
+                )}
+
+                {!form.embedded && onTest && (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={onTest}
+                      disabled={testing || busy || !form.host}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-accent transition-colors hover:text-accent-hover disabled:opacity-40"
+                    >
+                      {testing ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Zap className="h-3 w-3" />
+                      )}
+                      Test Connection
+                    </button>
+                    {testResult && !testing && (
+                      <span
+                        className={`flex items-center gap-1.5 text-xs ${
+                          testResult.ok ? 'text-success' : 'text-danger'
+                        }`}
+                      >
+                        {testResult.ok ? (
+                          <CheckCircle2 className="h-3 w-3" />
+                        ) : (
+                          <XCircle className="h-3 w-3" />
+                        )}
+                        <span className="truncate">
+                          {testResult.ok
+                            ? `Connected — Firebird ${testResult.firebirdVersion ?? '?'} (${testResult.durationMs} ms)`
+                            : testResult.error}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div className="relative">
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="block text-[11px] font-medium uppercase tracking-wide text-fg-muted">
+                      {form.embedded ? 'Database File' : 'Database Path or Alias'}
+                    </label>
+                    {!form.embedded && onListAliases && (
+                      <button
+                        ref={aliasBtnRef}
+                        type="button"
+                        onClick={() => (aliasOpen ? setAliasOpen(false) : openAliases())}
+                        className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-fg-subtle transition-colors hover:text-accent"
+                        title="Browse databases.conf aliases"
+                      >
+                        <ListTree className="h-3 w-3" />
+                        Aliases
+                      </button>
+                    )}
+                  </div>
+                  {form.embedded && onBrowseDatabase ? (
+                    <div className="flex">
+                      <input
+                        type="text"
+                        value={form.database}
+                        onChange={(e) => onChange('database', e.target.value)}
+                        placeholder="/Users/you/databases/my.fdb"
+                        className={`${INPUT_CLASS} rounded-r-none border-r-0 font-mono text-[12px]`}
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const picked = await onBrowseDatabase();
+                          if (picked) onChange('database', picked);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-r-md border border-edge bg-elevated px-3 text-xs font-medium text-fg-muted transition-colors hover:bg-panel hover:text-fg"
+                        title="Pick a .fdb file from disk"
+                      >
+                        <FolderOpen className="h-3.5 w-3.5" />
+                        Browse
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={form.database}
+                      onChange={(e) => onChange('database', e.target.value)}
+                      placeholder="/path/to/database.fdb or alias"
+                      className={INPUT_CLASS}
+                    />
+                  )}
+                  {/* A link under the field it relates to, rather than a
+                      button in the action bar: it opens a drawer of
+                      further connection settings, so it belongs with the
+                      connection details and not beside Save and Connect.
+                      Matches Test Connection, the screen's other inline
+                      action. */}
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedOpen(true)}
+                    title="Encryption · Pure-Rust · fbclient · charset"
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-medium text-accent transition-colors hover:text-accent-hover"
+                  >
+                    <SlidersHorizontal className="h-3 w-3" />
+                    Advanced settings
+                    {advancedTouched > 0 && (
+                      <span className="rounded-full bg-accent px-1.5 py-px text-[10px] font-semibold text-fg-inverted">
+                        {advancedTouched}
+                      </span>
+                    )}
+                  </button>
+                  {aliasOpen && (
+                    <div
+                      ref={aliasPopRef}
+                      role="dialog"
+                      aria-label="databases.conf aliases"
+                      // Drops upward. The field it hangs off sits near the foot of the
+                      // form, so opening downward put the list behind the pinned
+                      // action bar and clipped it at the pane edge.
+                      className="absolute bottom-full right-0 z-30 mb-1 w-80 overflow-hidden rounded-lg border border-edge bg-panel shadow-[0_12px_40px_rgba(0,0,0,0.25)]"
+                    >
+                      <header className="flex items-center justify-between border-b border-edge bg-canvas px-3 py-2">
+                        <div className="flex items-center gap-2 text-[11px] text-fg-muted">
+                          <ListTree className="h-3 w-3 text-fg-subtle" />
+                          <span className="font-semibold">databases.conf</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAliasOpen(false)}
+                          aria-label="Close aliases"
+                          className="rounded p-0.5 text-fg-subtle transition-colors hover:bg-elevated hover:text-fg"
+                        >
+                          <XCircle className="h-3 w-3" />
+                        </button>
+                      </header>
+                      {aliasesData?.sourcePath && (
+                        <div
+                          className="truncate border-b border-edge bg-inset px-3 py-1.5 font-mono text-[10px] text-fg-subtle"
+                          title={aliasesData.sourcePath}
+                        >
+                          {aliasesData.sourcePath}
+                        </div>
+                      )}
+                      <div className="max-h-60 overflow-y-auto py-1">
+                        {aliasesLoading ? (
+                          <div className="flex items-center justify-center gap-2 px-3 py-6 text-xs text-fg-subtle">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Reading databases.conf…
+                          </div>
+                        ) : !aliasesData || aliasesData.aliases.length === 0 ? (
+                          <p className="px-3 py-5 text-center text-xs text-fg-subtle">
+                            {aliasesData?.sourcePath
+                              ? 'No aliases defined.'
+                              : 'No databases.conf found on this host.'}
+                          </p>
+                        ) : (
+                          aliasesData.aliases.map((a) => (
+                            <button
+                              key={a.alias}
+                              type="button"
+                              onClick={() => {
+                                onChange('database', a.alias);
+                                setAliasOpen(false);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-elevated"
+                            >
+                              <Database className="h-3 w-3 shrink-0 text-fg-subtle" />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate font-mono text-[12px] text-fg">
+                                  {a.alias}
+                                </div>
+                                <div
+                                  className="truncate font-mono text-[10px] text-fg-subtle"
+                                  title={a.path}
+                                >
+                                  {a.path}
+                                </div>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </form>
-        </div>
+          </div>
+
+          {/* Pinned: always reachable regardless of window height.
+              Advanced settings sits here rather than at the foot of the
+              fields because it opens a drawer — it is an action, like
+              the two beside it, not a field. Below the fold it was also
+              the least discoverable thing on the screen. */}
+          <div className="mx-auto flex w-full max-w-[640px] shrink-0 items-center gap-2 border-t border-edge bg-panel px-8 py-4">
+            <button
+              type="button"
+              title={isCurrentSaved ? 'Profile saved' : 'Save profile'}
+              onClick={onSaveProfile}
+              disabled={busy || profileName.trim() === ''}
+              className={`flex items-center gap-1.5 rounded-lg border px-3.5 py-2.5 text-sm font-medium transition-all disabled:opacity-50 ${
+                isCurrentSaved
+                  ? 'border-accent/30 bg-accent-subtle text-accent'
+                  : 'border-edge text-fg-muted hover:bg-elevated hover:text-fg'
+              }`}
+            >
+              <Star className={`h-3.5 w-3.5 ${isCurrentSaved ? 'fill-current' : ''}`} />
+              <span className="text-xs">{isCurrentSaved ? 'Saved' : 'Save'}</span>
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent py-2.5 text-sm font-medium text-fg-inverted shadow-sm transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Connecting…
+                </>
+              ) : (
+                'Connect'
+              )}
+            </button>
+          </div>
+        </form>
       </div>
       {/* Bottom attribution strip — spans full width below both panels. */}
       <div className="flex shrink-0 items-center justify-between border-t border-edge bg-canvas px-6 py-3">
@@ -881,7 +1044,13 @@ export function ConnectionScreen({
                   type="checkbox"
                   checked={form.pureRust}
                   onChange={(e) => onChange('pureRust', e.target.checked)}
-                  className="accent-[var(--color-accent)]"
+                  disabled={form.embedded}
+                  className="accent-[var(--color-accent)] disabled:opacity-50"
+                  title={
+                    form.embedded
+                      ? 'Embedded mode is native-only; pure-Rust cannot use the embedded engine.'
+                      : undefined
+                  }
                 />
                 Pure-Rust mode
               </label>
@@ -1018,8 +1187,8 @@ export function ConnectionScreen({
                     ) : null}
                   </div>
                   <p className="mb-2 text-[10px] leading-snug text-fg-subtle">
-                    Downloads the platform-matched libfbclient from the Firebird
-                    project and sets the path above.
+                    Downloads the platform-matched libfbclient from the Firebird project and sets
+                    the path above.
                   </p>
                   <button
                     type="button"
@@ -1082,7 +1251,6 @@ export function ConnectionScreen({
                 </div>
               )}
             </div>
-
           </div>
 
           <footer className="flex shrink-0 items-center justify-end border-t border-edge bg-canvas px-5 py-3">
@@ -1198,11 +1366,7 @@ function ImportSettingsFooter() {
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-1.5 rounded px-1 py-1 text-[11px] font-medium text-fg-muted transition-colors hover:text-fg"
       >
-        {open ? (
-          <ChevronDown className="h-3 w-3" />
-        ) : (
-          <ChevronRight className="h-3 w-3" />
-        )}
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         <FileUp className="h-3 w-3" />
         Import settings…
       </button>

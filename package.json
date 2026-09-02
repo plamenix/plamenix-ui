@@ -14,6 +14,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs"
     },
+    "./plugin-react": {
+      "types": "./dist/plugin-react/index.d.ts",
+      "import": "./dist/plugin-react.mjs"
+    },
     "./theme.css": "./src/styles/theme.css",
     "./package.json": "./package.json"
   },
@@ -39,13 +43,14 @@
     "@codemirror/commands": "^6.7.0",
     "@codemirror/lang-sql": "^6.8.0",
     "@codemirror/language": "^6.10.0",
+    "@codemirror/lint": "^6.8.0",
     "@codemirror/state": "^6.5.0",
     "@codemirror/view": "^6.35.0",
     "@lezer/highlight": "^1.2.3",
     "@tanstack/react-table": "^8.20.0",
     "@tanstack/react-virtual": "^3.10.0",
     "codemirror": "^6.0.0",
-    "lucide-react": "^0.460.0",
+    "lucide-react": "^1.14.0",
     "write-excel-file": "^4.0.6",
     "zustand": "^5.0.0"
   },
@@ -54,6 +59,8 @@
     "react-dom": "^19"
   },
   "devDependencies": {
+    "@eslint/js": "^9",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -65,6 +72,7 @@
     "jsdom": "^29.1.1",
     "prettier": "^3",
     "typescript": "^6",
+    "typescript-eslint": "^8",
     "vite": "^8",
     "vite-plugin-dts": "^4",
     "vitest": "^4"

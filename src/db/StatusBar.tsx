@@ -1,15 +1,22 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
+// `ExternalLink`, not `Github`: lucide dropped its brand icons in 1.x
+// and the shells resolve 1.14, so the named import failed at module
+// load and took the whole app down with it.
+import { ExternalLink } from 'lucide-react';
+import { ToolbarSlot } from '../toolbar/ToolbarSlot';
+import { usePluginContributions } from '../plugin-react/usePluginContributions';
 import {
-  Check,
-  Circle,
-  Clipboard,
-  Database,
-  Github,
-  Hash,
-  Timer,
-} from 'lucide-react';
-import { selectRecent, useRecentQueries } from './recent-queries';
+  pluginContributionsToStatusBarItems,
+  statusBarItemsByAlignment,
+  type StatusBarContext,
+  type StatusBarItemContributionPayload,
+} from '../status-bar/status-bar-item-contract';
 import type { StatementOutcome } from './types';
+
+/** Per-button ctx the `status` toolbar slot hands plugins. */
+interface StatusToolbarCtx {
+  sessionId: string | null;
+}
 
 /** Brand attribution rendered at the right edge. Defaulted in
  *  {@link StatusBar} but overridable so a fork or downstream consumer
@@ -72,95 +79,49 @@ export function StatusBar({
   recentKey,
   attribution,
 }: StatusBarProps) {
-  const [copied, setCopied] = useState(false);
-  const lastDuration = useRecentQueries(
-    (s) => selectRecent(s, recentKey)[0]?.durationMs ?? null,
-  );
+  // I5.11 — register the five built-in left-side items (health dot,
+  // DSN+copy, last-FROM table, row count, last duration) through the
+  // `status_bar_items` registry. Each item's Component owns its own
+  // subscriptions (recent-queries hook for last duration, copy-state
+  // for the DSN button, etc.). Single mount per StatusBar instance.
+  const itemContributions =
+    usePluginContributions<StatusBarItemContributionPayload>('status_bar_items');
+  const descriptors = pluginContributionsToStatusBarItems(itemContributions);
+  const leftItems = statusBarItemsByAlignment(descriptors, 'left');
+  const rightItems = statusBarItemsByAlignment(descriptors, 'right');
 
-  const stem = stemOf(database);
-  const display = `${user || '—'}@${host || '—'}:${port}/${stem}`;
-  const dsn = `firebird://${user}@${host}:${port}/${database}`;
-  const table = tableFromSql(executedSql);
-  const rowCount = rowCountFromResults(results);
-  const credit = attribution === undefined ? DEFAULT_ATTRIBUTION : attribution;
-
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(dsn).catch(() => {});
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
+  const ctx: StatusBarContext = {
+    sessionId,
+    health,
+    user,
+    host,
+    port,
+    database,
+    executedSql,
+    results,
+    recentKey,
   };
+  const credit = attribution === undefined ? DEFAULT_ATTRIBUTION : attribution;
 
   return (
     <footer className="flex h-7 shrink-0 items-center gap-2 border-t border-edge bg-canvas px-3 text-[11px] text-fg-subtle">
-      <span
-        title={`Connection: ${sessionId ? health : 'disconnected'}`}
-        className="inline-flex items-center"
-      >
-        <Circle
-          className={`h-2 w-2 fill-current ${healthColorClass(sessionId, health)}`}
-          strokeWidth={0}
-        />
-      </span>
-
-      {sessionId !== null && (
-        <>
-          <span className="font-mono text-fg" title={dsn}>
-            {display}
-          </span>
-          <button
-            type="button"
-            onClick={handleCopy}
-            title={copied ? 'Copied!' : 'Copy connection string'}
-            aria-label="Copy connection string"
-            className="rounded p-0.5 text-fg-subtle transition-colors hover:bg-elevated hover:text-fg"
-          >
-            {copied ? (
-              <Check className="h-3 w-3 text-success" />
-            ) : (
-              <Clipboard className="h-3 w-3" />
-            )}
-          </button>
-
-          {table !== null && (
-            <>
-              <Separator />
-              <span className="inline-flex items-center gap-1">
-                <Database className="h-3 w-3" />
-                <span className="font-mono text-fg" title={`Last FROM: ${table}`}>
-                  {table}
-                </span>
-              </span>
-            </>
-          )}
-
-          {rowCount !== null && (
-            <>
-              <Separator />
-              <span className="inline-flex items-center gap-1">
-                <Hash className="h-3 w-3" />
-                <span className="font-mono text-fg">
-                  {rowCount.toLocaleString()}{' '}
-                  {rowCount === 1 ? 'row' : 'rows'}
-                </span>
-              </span>
-            </>
-          )}
-
-          {lastDuration !== null && (
-            <>
-              <Separator />
-              <span className="inline-flex items-center gap-1">
-                <Timer className="h-3 w-3" />
-                <span className="font-mono text-fg">
-                  {lastDuration.toLocaleString()} ms
-                </span>
-              </span>
-            </>
-          )}
-        </>
-      )}
+      {leftItems.map((d) => (
+        <d.Component key={d.id} ctx={ctx} />
+      ))}
 
       <span className="flex-1" />
+
+      {/* I5.11 — plugin-contributed right-side status-bar items (rich
+          Components) sit between the spacer and the I5.3 button slot.
+          Empty by default — built-in only registers left-side items. */}
+      {rightItems.map((d) => (
+        <d.Component key={d.id} ctx={ctx} />
+      ))}
+
+      {/* I5.3 — plugin-contributed status-bar buttons (simple
+          label+icon+click). Distinct from I5.11 status_bar_items
+          which carries arbitrary Components. */}
+      <ToolbarSlot<StatusToolbarCtx> location="status" ctx={{ sessionId }} />
 
       {credit !== null && (
         <a
@@ -170,7 +131,7 @@ export function StatusBar({
           className="inline-flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:bg-elevated hover:text-fg"
           title={`Visit ${credit.name} on GitHub`}
         >
-          <Github className="h-3 w-3" />
+          <ExternalLink className="h-3 w-3" />
           <span>
             © {credit.year} {credit.name} · {credit.brand}
           </span>
@@ -180,11 +141,11 @@ export function StatusBar({
   );
 }
 
-function Separator() {
+export function Separator() {
   return <span className="text-fg-subtle" aria-hidden="true">·</span>;
 }
 
-function healthColorClass(
+export function healthColorClass(
   sessionId: string | null,
   health: StatusBarProps['health'],
 ): string {
@@ -202,7 +163,7 @@ function healthColorClass(
   }
 }
 
-function stemOf(path: string): string {
+export function stemOf(path: string): string {
   const trimmed = path.trim();
   if (trimmed.length === 0) return '';
   const tail = trimmed.split(/[\\/]/).pop();
@@ -213,7 +174,7 @@ function stemOf(path: string): string {
  *  matches the first identifier after `FROM`. Quoted identifiers keep
  *  their inner text; bare identifiers are returned verbatim. Returns
  *  `null` when no FROM clause is present. */
-function tableFromSql(sql: string | null): string | null {
+export function tableFromSql(sql: string | null): string | null {
   if (!sql) return null;
   const cleaned = sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   const m = /\bfrom\s+(?:"([^"]+)"|([A-Za-z_$][\w$]*))/i.exec(cleaned);
@@ -221,7 +182,7 @@ function tableFromSql(sql: string | null): string | null {
   return m[1] ?? m[2] ?? null;
 }
 
-function rowCountFromResults(results: StatementOutcome[] | null): number | null {
+export function rowCountFromResults(results: StatementOutcome[] | null): number | null {
   if (!results || results.length === 0) return null;
   const last = results[results.length - 1];
   if (!last || last.status !== 'ok') return null;

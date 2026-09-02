@@ -16,6 +16,16 @@ import type { HistoryEntry } from './types';
 
 export interface HistoryPanelProps {
   open: boolean;
+  /**
+   * How the panel is presented.
+   *
+   * `'dialog'` (default) is the floating overlay the keyboard shortcut
+   * raises. `'page'` fills its container instead, for use as a top-bar
+   * destination beside Home — same list, same actions, no backdrop and
+   * no click-outside-to-dismiss, because in a page those would close a
+   * view the user navigated to deliberately.
+   */
+  variant?: 'dialog' | 'page';
   /** Label shown in the header — typically the active profile's name. */
   profileLabel: string;
   /** Entries to display, newest first. Pass `null` while loading. */
@@ -50,6 +60,7 @@ export interface HistoryPanelProps {
  */
 export function HistoryPanel({
   open,
+  variant = 'dialog',
   profileLabel,
   entries,
   loading = false,
@@ -72,7 +83,7 @@ export function HistoryPanel({
   const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || variant === 'page') return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -81,7 +92,7 @@ export function HistoryPanel({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, variant, onClose]);
 
   // Reset the query + selection whenever the panel closes so the next
   // open starts from a clean state; auto-focus the search input on
@@ -126,17 +137,13 @@ export function HistoryPanel({
     });
   }, [entries]);
 
-  const filteredIds = useMemo(
-    () => (filtered ? filtered.map((e) => e.id) : []),
-    [filtered],
-  );
+  const filteredIds = useMemo(() => (filtered ? filtered.map((e) => e.id) : []), [filtered]);
   const selectableCount = filteredIds.length;
   const selectedInView = useMemo(
     () => filteredIds.filter((id) => selectedIds.has(id)).length,
     [filteredIds, selectedIds],
   );
-  const allInViewSelected =
-    selectableCount > 0 && selectedInView === selectableCount;
+  const allInViewSelected = selectableCount > 0 && selectedInView === selectableCount;
   const someInViewSelected = selectedInView > 0;
 
   const toggleSelect = (id: number) => {
@@ -186,11 +193,7 @@ export function HistoryPanel({
   const handleDeleteSelected = async () => {
     if (!onDeleteEntries || selectedIds.size === 0 || bulkBusy) return;
     const ids = [...selectedIds];
-    if (
-      !window.confirm(
-        `Delete ${ids.length} entr${ids.length === 1 ? 'y' : 'ies'}?`,
-      )
-    ) {
+    if (!window.confirm(`Delete ${ids.length} entr${ids.length === 1 ? 'y' : 'ies'}?`)) {
       return;
     }
     setBulkBusy(true);
@@ -254,15 +257,23 @@ export function HistoryPanel({
 
   return (
     <div
-      role="dialog"
+      role={variant === 'page' ? 'region' : 'dialog'}
       aria-label="Query history"
-      onClick={onClose}
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 backdrop-blur-sm"
+      onClick={variant === 'page' ? undefined : onClose}
+      className={
+        variant === 'page'
+          ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+          : 'fixed inset-0 z-[60] flex items-start justify-center bg-black/40 backdrop-blur-sm'
+      }
     >
       <div
         ref={ref}
-        onClick={(e) => e.stopPropagation()}
-        className="mt-[10vh] flex max-h-[80vh] w-[min(48rem,92vw)] flex-col overflow-hidden rounded-xl border border-edge bg-panel shadow-[0_24px_60px_rgba(0,0,0,0.4)]"
+        onClick={variant === 'page' ? undefined : (e) => e.stopPropagation()}
+        className={
+          variant === 'page'
+            ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+            : 'mt-[10vh] flex max-h-[80vh] w-[min(48rem,92vw)] flex-col overflow-hidden rounded-xl border border-edge bg-panel shadow-[0_24px_60px_rgba(0,0,0,0.4)]'
+        }
       >
         <header className="flex items-center gap-2 border-b border-edge bg-canvas px-3 py-2.5">
           <History className="h-4 w-4 text-fg-subtle" />
@@ -385,7 +396,7 @@ export function HistoryPanel({
             </div>
           ) : !entries || entries.length === 0 ? (
             <p className="py-12 text-center text-sm text-fg-subtle">
-              No history yet. Execute SQL while this profile is open and entries appear here.
+              No history yet. Run a statement against this connection and it appears here.
             </p>
           ) : filtered && filtered.length === 0 ? (
             <p className="py-12 text-center text-sm text-fg-subtle">
@@ -405,9 +416,7 @@ export function HistoryPanel({
                   <li
                     key={e.id}
                     onMouseEnter={() => setHoveredId(e.id)}
-                    onMouseLeave={() =>
-                      setHoveredId((prev) => (prev === e.id ? null : prev))
-                    }
+                    onMouseLeave={() => setHoveredId((prev) => (prev === e.id ? null : prev))}
                     className={`flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-elevated ${
                       checked ? 'bg-accent-subtle/30' : ''
                     }`}
@@ -417,9 +426,7 @@ export function HistoryPanel({
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleSelect(e.id)}
-                        aria-label={
-                          checked ? 'Deselect entry' : 'Select entry'
-                        }
+                        aria-label={checked ? 'Deselect entry' : 'Select entry'}
                         className="mt-1 h-3.5 w-3.5 shrink-0 cursor-pointer accent-accent"
                       />
                     )}

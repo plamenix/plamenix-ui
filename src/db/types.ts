@@ -36,6 +36,11 @@ export type {
   TableKind,
   TestConnectionResult,
   TriggerInfo,
+  TxConfig,
+  TxIsolation,
+  TxLocking,
+  TxMode,
+  TxStatus,
 } from './generated';
 
 import type {
@@ -78,6 +83,11 @@ export interface ConnectionForm {
    *  `WIN1250` for Croatian / Czech / Polish databases that predate
    *  UTF8 collations). */
   charset: string;
+  /** When true, attach via Firebird's embedded engine — `database`
+   *  is a local file path; `host` and `port` are ignored; the OS
+   *  user becomes the attached user (no password). Exclusive access
+   *  only. Native mode required. */
+  embedded: boolean;
 }
 
 /** Charset choices surfaced by the connection dialog. Values match
@@ -148,8 +158,14 @@ export type SchemaAction =
       kind: 'generator';
       action: 'set-value';
       target: GeneratorInfo;
-      /** New target value for the generator counter. */
-      value: number;
+      /** New target value for the generator counter, as exact decimal
+       *  text — a generator is a BIGINT and does not fit a JS number.
+       *
+       *  This is interpolated into DDL, so it must already have passed
+       *  `parseExactInt`, which admits only an optional sign followed by
+       *  digits within the signed 64-bit range. Never assign a raw draft
+       *  string here. */
+      value: string;
       /** Active engine version string (e.g. `'3.0.7'`). Drives the
        *  dialect choice in {@link schemaDdl}: ALTER SEQUENCE RESTART
        *  WITH for FB 3+, SET GENERATOR TO for older. `null` defaults
@@ -166,6 +182,7 @@ export function renderCell(cell: ColumnValue): string {
     case 'text':
       return cell.value;
     case 'integer':
+    case 'decimal':
       return String(cell.value);
     case 'float':
       return cell.value === null ? 'NULL' : String(cell.value);

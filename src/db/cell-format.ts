@@ -43,6 +43,7 @@ export function cellToCsv(cell: ColumnValue | undefined, delimiter: string): str
     case 'text':
       return quoteCsvField(cell.value, delimiter);
     case 'integer':
+    case 'decimal':
     case 'float':
       return String(cell.value);
     case 'bool':
@@ -69,6 +70,7 @@ export function cellToPlainText(cell: ColumnValue | undefined): string {
     case 'text':
       return cell.value;
     case 'integer':
+    case 'decimal':
       return String(cell.value);
     case 'float':
       return cell.value === null ? '' : String(cell.value);
@@ -79,10 +81,20 @@ export function cellToPlainText(cell: ColumnValue | undefined): string {
   }
 }
 
+/**
+ * Renders a cell as a JSON-serialisable value.
+ *
+ * Integers stay **strings**, uniformly, even when small. A Firebird
+ * `BIGINT` exceeds what a JSON number survives — `JSON.parse` would
+ * round it in any JavaScript consumer — and emitting a number
+ * sometimes and a string other times would hand downstream parsers a
+ * column whose type changes with its magnitude. Consumers that want
+ * arithmetic can `Number(x)` or `BigInt(x)` knowing exactly what they
+ * have. Floats stay numbers: they are approximate by definition and
+ * JSON represents them faithfully.
+ */
 export function cellToJson(cell: ColumnValue | undefined): unknown {
   if (!cell || cell.type === 'null') return null;
-  if (cell.type === 'integer' || cell.type === 'float') return cell.value;
-  if (cell.type === 'bool') return cell.value;
   if (cell.type === 'blob') return blobSummary(cell.value);
   return cell.value;
 }
@@ -96,6 +108,9 @@ export function cellToSqlLiteral(cell: ColumnValue | undefined): string {
     case 'text':
       return `'${cell.value.replace(/'/g, "''")}'`;
     case 'integer':
+    // Bare numeric literal: quoting would make Firebird re-parse the
+    // exact decimal as a string on import.
+    case 'decimal':
       return String(cell.value);
     case 'float':
       return cell.value === null ? 'NULL' : String(cell.value);
@@ -130,7 +145,15 @@ export type XlsxCell = { value: string | number | boolean | null };
 
 export function cellToXlsx(cell: ColumnValue | undefined): XlsxCell {
   if (!cell || cell.type === 'null') return { value: null };
-  if (cell.type === 'integer' || cell.type === 'float') return { value: cell.value };
+  if (cell.type === 'integer') {
+    // A spreadsheet number is an IEEE-754 double, so a BIGINT past 2^53
+    // cannot be held numerically without corruption. Emit a real number
+    // while it fits — users sum and sort these columns — and fall back
+    // to text beyond that, which is what a spreadsheet can represent.
+    const asNumber = Number(cell.value);
+    return Number.isSafeInteger(asNumber) ? { value: asNumber } : { value: cell.value };
+  }
+  if (cell.type === 'float') return { value: cell.value };
   if (cell.type === 'bool') return { value: cell.value };
   if (cell.type === 'blob') return { value: blobSummary(cell.value) };
   return { value: cell.value };

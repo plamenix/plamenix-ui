@@ -1,14 +1,24 @@
 import { useEffect } from 'react';
 import {
+  Activity,
   AlertCircle,
   Check,
   Plug,
+  RotateCcw,
   Shield,
   ShieldAlert,
   Terminal,
   X,
 } from 'lucide-react';
 import type { ActivePlugin, SidebarPanelInfo } from './types';
+import {
+  DISABLE_REASON_LABEL,
+  RESTART_POLICY_LABEL,
+  STATUS_LABEL,
+  STATUS_PILL_CLASS,
+  crashBudgetBarClass,
+  crashBudgetPercent,
+} from './supervision-labels';
 
 export interface PluginPanelModalProps {
   plugin: ActivePlugin | null;
@@ -19,6 +29,10 @@ export interface PluginPanelModalProps {
   onGrant?: (pluginId: string, permission: string) => void;
   /** Fires when the user revokes a previously granted permission. */
   onRevoke?: (pluginId: string, permission: string) => void;
+  /** Fires when the user re-enables a `disabled` plugin from the
+   *  supervision panel. Host calls `plugin_re_enable(pluginId)` then
+   *  refreshes the plugin list. */
+  onReEnable?: (pluginId: string) => void;
 }
 
 const LEVEL_CLASS: Record<string, string> = {
@@ -41,6 +55,7 @@ export function PluginPanelModal({
   onClose,
   onGrant,
   onRevoke,
+  onReEnable,
 }: PluginPanelModalProps) {
   useEffect(() => {
     if (!plugin) return;
@@ -123,6 +138,8 @@ export function PluginPanelModal({
           </section>
 
           <PermissionsSection plugin={plugin} onGrant={onGrant} onRevoke={onRevoke} />
+
+          <SupervisionSection plugin={plugin} onReEnable={onReEnable} />
 
           <section className="rounded border border-edge bg-canvas p-3 text-[11px] text-fg-subtle">
             This is the v0 host-rendered plugin scaffold. Plugins will ship their own React UI
@@ -269,5 +286,89 @@ function PermissionList({
         })}
       </ul>
     </div>
+  );
+}
+
+function SupervisionSection({
+  plugin,
+  onReEnable,
+}: {
+  plugin: ActivePlugin;
+  onReEnable: ((pluginId: string) => void) | undefined;
+}) {
+  const sup = plugin.supervision;
+  if (!sup) return null;
+  const budgetPct = crashBudgetPercent(sup.crashBudget.used, sup.crashBudget.max);
+  const isDisabled = sup.status === 'disabled';
+  const barClass = crashBudgetBarClass(sup.crashBudget.used, isDisabled);
+  return (
+    <section className="rounded-lg border border-edge bg-canvas p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-[12px] font-medium text-fg">
+          <Activity className="h-3.5 w-3.5 text-fg-subtle" aria-hidden />
+          Supervision
+        </h3>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${STATUS_PILL_CLASS[sup.status]}`}
+        >
+          {STATUS_LABEL[sup.status]}
+        </span>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+        <dt className="text-fg-subtle">Restart policy</dt>
+        <dd className="text-fg-muted">
+          {RESTART_POLICY_LABEL[sup.restartPolicy] ?? sup.restartPolicy}
+        </dd>
+        <dt className="text-fg-subtle">Restarts so far</dt>
+        <dd className="text-fg-muted">{sup.restartCount}</dd>
+        <dt className="text-fg-subtle">
+          Crash budget ({sup.crashBudget.windowSecs}s window)
+        </dt>
+        <dd className="text-fg-muted">
+          {sup.crashBudget.used} of {sup.crashBudget.max} used
+        </dd>
+      </dl>
+
+      <div
+        className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-bg-subtle"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={sup.crashBudget.max}
+        aria-valuenow={sup.crashBudget.used}
+        aria-label="Crash budget"
+      >
+        <div
+          className={`h-full ${barClass}`}
+          style={{ width: `${budgetPct}%` }}
+        />
+      </div>
+
+      {isDisabled && (
+        <div className="mt-3 rounded-md border border-red-500/30 bg-red-500/10 p-2 text-[11px] text-red-200">
+          <div className="flex items-start gap-1.5">
+            <ShieldAlert
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-300"
+              aria-hidden
+            />
+            <p className="flex-1">
+              {sup.disableReason !== undefined
+                ? (DISABLE_REASON_LABEL[sup.disableReason] ?? sup.disableReason)
+                : 'Plugin disabled by the supervisor.'}
+            </p>
+          </div>
+          {onReEnable && (
+            <button
+              type="button"
+              onClick={() => onReEnable(plugin.id)}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-red-500 px-3 py-1 text-[11px] font-medium text-white hover:bg-red-400 focus:outline-none focus:ring-2 focus:ring-red-300"
+            >
+              <RotateCcw className="h-3 w-3" aria-hidden />
+              Re-enable plugin
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

@@ -6,6 +6,7 @@ import type {
   Schema,
   StatementOutcome,
   TestConnectionResult,
+  TxStatus,
 } from './types';
 
 /** Default form values used for every fresh tab. Edition consumers
@@ -21,6 +22,7 @@ export const DEFAULT_FORM: ConnectionForm = {
   encryptionRequired: false,
   fbclientPath: '',
   charset: 'UTF8',
+  embedded: false,
 };
 
 /** Per-tab state. Each tab is independent: its own session, SQL
@@ -57,6 +59,11 @@ export interface TabState {
    *  user-resized `ID` column stays at the same width when re-running
    *  the SELECT. */
   columnWidths: Record<string, number>;
+  /** Transaction state for this tab's session, or `null` while
+   *  disconnected. Per tab because each tab owns its own session, so
+   *  one tab can sit in a manual transaction while another commits
+   *  freely. */
+  txStatus: TxStatus | null;
   /** Result of the most recent background liveness ping for this tab.
    *  `'unknown'` until the first probe lands; `'healthy'` while pings
    *  succeed; `'reconnecting'` while a recovery attempt is in flight;
@@ -86,6 +93,18 @@ export interface TabState {
    *  results table. Cleared when the user runs a different query in
    *  the editor or closes the view. `null` outside table-focus mode. */
   focusedObjectName: string | null;
+  /** Procedure / trigger / generator / domain (and bare-DDL view) the
+   *  user has opened from the schema browser. Drives the in-pane
+   *  `RoutineObjectView`; cleared when the user runs anything new in
+   *  the editor or closes the view. Holds the kind, name, fetched
+   *  source body, and loading / error chrome the view needs. */
+  focusedRoutine: {
+    kind: 'view' | 'procedure' | 'trigger' | 'generator' | 'domain';
+    name: string;
+    source: string | null;
+    loading: boolean;
+    error: string | null;
+  } | null;
 }
 
 /** Tab-store actions. State mutation goes exclusively through these;
@@ -116,21 +135,20 @@ export type TabsStore = {
   activeTabId: string;
 } & TabsStoreActions;
 
-const SQL_PLACEHOLDER = "SELECT 42 AS answer, 'plamenix' AS name FROM RDB$DATABASE";
-
 function freshTab(): TabState {
   return {
     id: crypto.randomUUID(),
     title: 'New tab',
     sessionId: null,
-    sql: SQL_PLACEHOLDER,
+    sql: '',
     executedSql: null,
     results: null,
     cryptState: null,
     schema: null,
     error: null,
     busy: false,
-    form: { ...DEFAULT_FORM, password: 'masterkey' },
+    txStatus: null,
+    form: { ...DEFAULT_FORM },
     selectedProfileId: null,
     profileName: '',
     profileColor: null,
@@ -143,6 +161,7 @@ function freshTab(): TabState {
     testing: false,
     testResult: null,
     focusedObjectName: null,
+    focusedRoutine: null,
   };
 }
 
@@ -180,6 +199,10 @@ function inflateTab(saved: PersistedTab): TabState {
   return {
     id: saved.id,
     title: saved.title,
+    // sessionId is intentionally NOT pulled from `saved`. It's the
+    // only field whose lifetime must match the webview lifetime, not
+    // the localStorage lifetime — see the `plamenix.session.<tabId>`
+    // sessionStorage layer the host maintains.
     sessionId: null,
     sql: saved.sql,
     executedSql: saved.executedSql,
@@ -188,9 +211,15 @@ function inflateTab(saved: PersistedTab): TabState {
     schema: null,
     error: null,
     busy: false,
+    // Never restored: the session it described died with the process,
+    // so a rehydrated tab starts with no transaction.
+    txStatus: null,
     // Merge against DEFAULT_FORM so older persisted shapes pick up
     // newer fields (e.g. `fbclientPath`) with controlled defaults.
-    form: { ...DEFAULT_FORM, ...saved.form },
+    // Secrets are re-cleared after the merge: a build shipped between
+    // 2026-05 and 2026-08 persisted a literal password, so entries
+    // already in localStorage cannot be trusted to be sanitised.
+    form: { ...DEFAULT_FORM, ...saved.form, password: '', encryptionKey: '' },
     selectedProfileId: saved.selectedProfileId,
     profileName: saved.profileName,
     profileColor: saved.profileColor ?? null,
@@ -203,6 +232,7 @@ function inflateTab(saved: PersistedTab): TabState {
     testing: false,
     testResult: null,
     focusedObjectName: null,
+    focusedRoutine: null,
   };
 }
 
@@ -259,13 +289,7 @@ export const useTabsStore = create<TabsStore>()(
           })),
         reorderTab: (from, to) =>
           set((s) => {
-            if (
-              from === to ||
-              from < 0 ||
-              from >= s.tabs.length ||
-              to < 0 ||
-              to >= s.tabs.length
-            ) {
+            if (from === to || from < 0 || from >= s.tabs.length || to < 0 || to >= s.tabs.length) {
               return {};
             }
             const next = s.tabs.slice();
@@ -278,8 +302,24 @@ export const useTabsStore = create<TabsStore>()(
     },
     {
       name: 'plamenix.tabs',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState, fromVersion) => {
+        // v1 → v2: pre-1.0.0-beta tabs shipped with a demo SQL
+        // placeholder (`SELECT 42 AS answer, …`) baked into every
+        // fresh tab. Drop it so already-persisted tabs land empty
+        // for users coming from the test build.
+        const PRE_BETA_PLACEHOLDER = "SELECT 42 AS answer, 'plamenix' AS name FROM RDB$DATABASE";
+        if (fromVersion < 2 && persistedState && typeof persistedState === 'object') {
+          const state = persistedState as PersistedTabsState;
+          if (Array.isArray(state.tabs)) {
+            state.tabs = state.tabs.map((t) =>
+              t.sql === PRE_BETA_PLACEHOLDER ? { ...t, sql: '' } : t,
+            );
+          }
+        }
+        return persistedState as PersistedTabsState;
+      },
       partialize: (s): PersistedTabsState => ({
         activeTabId: s.activeTabId,
         tabs: s.tabs.map(
@@ -303,8 +343,7 @@ export const useTabsStore = create<TabsStore>()(
           return currentState;
         }
         const tabs = persisted.tabs.map(inflateTab);
-        const activeTabId =
-          tabs.find((t) => t.id === persisted.activeTabId)?.id ?? tabs[0]!.id;
+        const activeTabId = tabs.find((t) => t.id === persisted.activeTabId)?.id ?? tabs[0]!.id;
         return { ...currentState, tabs, activeTabId };
       },
     },

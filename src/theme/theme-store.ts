@@ -19,11 +19,19 @@ export interface ThemeState {
   mode: ThemeMode;
   accent: AccentId;
   sidebarCollapsed: boolean;
+  /** I5.8 — active theme contribution id (`<pluginId>:<contribId>`).
+   *  `null` means "no theme override active" — the shell falls back
+   *  to the legacy `mode` + `accent` behavior. When set, the
+   *  registered theme's `cssVariables` are applied to `<html>` and
+   *  its `mode` overrides the user's mode pick (unless the theme
+   *  registered `mode: 'auto'`). */
+  activeThemeId: string | null;
   setMode: (mode: ThemeMode) => void;
   toggleMode: () => void;
   setAccent: (accent: AccentId) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
+  setActiveThemeId: (id: string | null) => void;
 }
 
 const ACCENT_IDS = new Set(ACCENT_COLORS.map((c) => c.id));
@@ -52,6 +60,8 @@ export const useThemeStore = create<ThemeState>()(
       mode: 'system',
       accent: 'amber',
       sidebarCollapsed: false,
+      activeThemeId: null,
+      setActiveThemeId: (activeThemeId) => set({ activeThemeId }),
       setMode: (mode) => set({ mode }),
       // When the user toggles from `'system'`, snap to the opposite of
       // whatever the system currently shows so the click flips the
@@ -71,7 +81,12 @@ export const useThemeStore = create<ThemeState>()(
     {
       name: 'plamenix.theme',
       version: 2,
-      partialize: (s) => ({ mode: s.mode, accent: s.accent, sidebarCollapsed: s.sidebarCollapsed }),
+      partialize: (s) => ({
+        mode: s.mode,
+        accent: s.accent,
+        sidebarCollapsed: s.sidebarCollapsed,
+        activeThemeId: s.activeThemeId,
+      }),
       // Additive bump: every prior shape is a subset of the current
       // one. Hand the persisted state back unchanged and let the
       // rehydrate guard below fill in any missing fields with defaults.
@@ -84,6 +99,9 @@ export const useThemeStore = create<ThemeState>()(
         if (!ACCENT_IDS.has(rehydrated.accent)) {
           // Drop unknown accents from older schemas; fall back to amber.
           rehydrated.accent = 'amber';
+        }
+        if (typeof rehydrated.activeThemeId !== 'string' && rehydrated.activeThemeId !== null) {
+          rehydrated.activeThemeId = null;
         }
       },
     },
