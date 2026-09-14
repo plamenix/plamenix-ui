@@ -72,6 +72,12 @@ export interface SchemaBrowserProps extends SchemaBrowserExtra {
   /** The current schema, or `null` while it is being fetched / before
    *  a session is open. */
   schema: Schema | null;
+  /** True while a schema describe is in flight. When no schema has
+   *  arrived yet this shows an explicit loading state in place of the
+   *  empty-tree message — on a large database the describe is slow
+   *  enough that silence read as a broken connect — and the refresh
+   *  buttons spin for the duration. */
+  schemaLoading?: boolean;
   /** Disables the refresh button while a request is in flight. */
   busy?: boolean;
   /** Fired when the user clicks the refresh button. Omit to hide. */
@@ -233,6 +239,7 @@ function highlightMatch(text: string, query: string): ReactNode {
  */
 export function SchemaBrowser({
   schema,
+  schemaLoading = false,
   busy = false,
   onRefresh,
   onSelect,
@@ -396,7 +403,7 @@ export function SchemaBrowser({
             <button
               type="button"
               onClick={onExportDatabase}
-              disabled={busy}
+              disabled={busy || schemaLoading}
               aria-label="Export database"
               title="Export database…"
               className="rounded-md p-1 text-fg-subtle transition-colors hover:bg-elevated hover:text-fg disabled:opacity-50"
@@ -408,12 +415,12 @@ export function SchemaBrowser({
             <button
               type="button"
               onClick={onRefresh}
-              disabled={busy}
+              disabled={busy || schemaLoading}
               aria-label="Refresh schema"
               title="Refresh schema"
               className="rounded-md p-1 text-fg-subtle transition-colors hover:bg-elevated hover:text-fg disabled:opacity-50"
             >
-              {busy ? (
+              {busy || schemaLoading ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -462,7 +469,17 @@ export function SchemaBrowser({
       </div>
 
       <div className="flex-1 overflow-y-auto py-1">
-        {schema === null ? (
+        {schema === null && schemaLoading ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-8 text-center">
+            <Loader2 className="h-5 w-5 animate-spin text-accent" />
+            <p className="text-xs font-medium text-fg-muted">
+              Loading schema<span className="text-fg-subtle">…</span>
+            </p>
+            <p className="text-[10px] text-fg-subtle">
+              Reading metadata — large databases can take a while
+            </p>
+          </div>
+        ) : schema === null ? (
           <p className="px-3 py-2 italic text-fg-subtle">No schema loaded.</p>
         ) : allTables.length === 0 &&
           allProcs.length === 0 &&

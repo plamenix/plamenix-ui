@@ -13,7 +13,9 @@ import type { CryptState, Schema, TxStatus } from './types.js';
  *
  * - **Schema** failing sets the tab's error. The object list is how the
  *   user navigates; its absence is not cosmetic and should not be
- *   silent.
+ *   silent. While it runs, `schemaLoading` is true so the shell can
+ *   show progress instead of an empty tree — on a large database the
+ *   describe is slow enough to read as a hang.
  * - **Crypt state** and **engine version** failing clear their values.
  *   Both drive badges. A stale badge is worse than an absent one — it
  *   describes a database or a server that may no longer be there.
@@ -40,6 +42,10 @@ export interface SessionRefreshPatch {
   engineVersion?: string | null;
   lastPingAt?: number;
   schema?: Schema;
+  /** True while a describe is in flight, false when it settles. Drives
+   *  the sidebar's loading state — on a large database the describe is
+   *  slow enough that a bare empty tree read as a broken connect. */
+  schemaLoading?: boolean;
   txStatus?: TxStatus;
   error?: string;
 }
@@ -67,6 +73,13 @@ export function useSessionRefreshers({
     latest.current = { adapter, patchTab };
   });
 
+  // Describes overlap — connect fires one, a DDL dispatch can fire
+  // another before the first settles. Only the newest describe per tab
+  // may write, so a slow earlier fetch finishing late cannot overwrite
+  // a fresher schema (or clear `schemaLoading` out from under the one
+  // still running).
+  const schemaGeneration = useRef(new Map<string, number>());
+
   const refreshCryptState = useCallback(async (tabId: string, sessionId: string) => {
     const { adapter: a, patchTab: patch } = latest.current;
     try {
@@ -91,10 +104,18 @@ export function useSessionRefreshers({
 
   const refreshSchema = useCallback(async (tabId: string, sessionId: string) => {
     const { adapter: a, patchTab: patch } = latest.current;
+    const gen = (schemaGeneration.current.get(tabId) ?? 0) + 1;
+    schemaGeneration.current.set(tabId, gen);
+    patch(tabId, { schemaLoading: true });
     try {
-      patch(tabId, { schema: await a.describeSchema(sessionId) });
+      const schema = await a.describeSchema(sessionId);
+      // A newer describe has taken over this tab — drop the stale
+      // result rather than pointing the tab at an older schema.
+      if (schemaGeneration.current.get(tabId) !== gen) return;
+      patch(tabId, { schema, schemaLoading: false });
     } catch (err) {
-      patch(tabId, { error: String(err) });
+      if (schemaGeneration.current.get(tabId) !== gen) return;
+      patch(tabId, { error: String(err), schemaLoading: false });
     }
   }, []);
 
