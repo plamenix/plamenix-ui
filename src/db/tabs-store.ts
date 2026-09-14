@@ -42,6 +42,12 @@ export interface TabState {
   results: StatementOutcome[] | null;
   cryptState: CryptState | null;
   schema: Schema | null;
+  /** True while a schema describe is in flight for this tab. The
+   *  sidebar and object pages render a loading state from this instead
+   *  of an empty tree: on a large database the describe can take a
+   *  while, and a bare "nothing here" read as a broken connect — the
+   *  first-time user had no way to tell the difference. */
+  schemaLoading: boolean;
   error: string | null;
   busy: boolean;
   form: ConnectionForm;
@@ -145,6 +151,7 @@ function freshTab(): TabState {
     results: null,
     cryptState: null,
     schema: null,
+    schemaLoading: false,
     error: null,
     busy: false,
     txStatus: null,
@@ -209,6 +216,7 @@ function inflateTab(saved: PersistedTab): TabState {
     results: null,
     cryptState: null,
     schema: null,
+    schemaLoading: false,
     error: null,
     busy: false,
     // Never restored: the session it described died with the process,

@@ -45,26 +45,35 @@ function merged(patches: [string, SessionRefreshPatch][]): SessionRefreshPatch {
   return patches.reduce((acc, [, p]) => ({ ...acc, ...p }), {});
 }
 
+/** The schemaLoading lifecycle every describe follows: a `true` patch
+ *  when it starts, a `false` patch when it settles (if it is still the
+ *  newest describe for its tab). */
 describe('refreshSchema', () => {
-  it('stores the schema it read', async () => {
+  it('marks the describe in flight, then stores the schema it read', async () => {
     const h = setup();
     await act(async () => {
       await h.rendered.result.current.refreshSchema('t1', 's1');
     });
 
     expect(h.adapter.describeSchema).toHaveBeenCalledWith('s1');
-    expect(h.patches).toEqual([['t1', { schema: SCHEMA }]]);
+    expect(h.patches).toEqual([
+      ['t1', { schemaLoading: true }],
+      ['t1', { schema: SCHEMA, schemaLoading: false }],
+    ]);
   });
 
-  it('surfaces a failure as a tab error', async () => {
+  it('clears the loading flag when the describe fails', async () => {
     // The object list is how the user navigates. Losing it silently
-    // leaves them looking at an empty sidebar with no explanation.
+    // leaves them looking at an empty sidebar with no explanation — and
+    // leaving the spinner up forever after that failure is the same
+    // non-answer with extra motion.
     const h = setup({ describeSchema: vi.fn().mockRejectedValue(new Error('no permission')) });
     await act(async () => {
       await h.rendered.result.current.refreshSchema('t1', 's1');
     });
 
     expect(merged(h.patches).error).toContain('no permission');
+    expect(merged(h.patches).schemaLoading).toBe(false);
   });
 
   it('leaves the previous schema in place when a refresh fails', async () => {
@@ -76,6 +85,79 @@ describe('refreshSchema', () => {
     });
 
     expect(merged(h.patches).schema).toBeUndefined();
+  });
+
+  it('does not let a stale describe overwrite a newer one', async () => {
+    // Connect fires a describe; the user hits refresh before it lands.
+    // Whichever finishes second wins — a slow first fetch settling late
+    // must not replace the schema the newer one already stored, and
+    // must not clear its loading flag out from under it.
+    let resolveFirst: (s: Schema) => void = () => {};
+    let resolveSecond: (s: Schema) => void = () => {};
+    const first = new Promise<Schema>((r) => (resolveFirst = r));
+    const second = new Promise<Schema>((r) => (resolveSecond = r));
+    const describe = vi
+      .fn()
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(() => second);
+    const h = setup({ describeSchema: describe });
+
+    let runFirst: Promise<void> = Promise.resolve();
+    let runSecond: Promise<void> = Promise.resolve();
+    act(() => {
+      runFirst = h.rendered.result.current.refreshSchema('t1', 's1');
+      runSecond = h.rendered.result.current.refreshSchema('t1', 's1');
+    });
+
+    const secondSchema = { tables: [], procedures: [] } as unknown as Schema;
+    await act(async () => {
+      resolveSecond(secondSchema);
+      await runSecond;
+    });
+    const firstSchema = { tables: [], procedures: [] } as unknown as Schema;
+    await act(async () => {
+      resolveFirst(firstSchema);
+      await runFirst;
+    });
+
+    // The stale (first) describe writes nothing at all.
+    expect(merged(h.patches).schema).toBe(secondSchema);
+    expect(merged(h.patches).schemaLoading).toBe(false);
+  });
+
+  it('keeps the loading flag up while an older fetch is still running', async () => {
+    let resolveFirst: (s: Schema) => void = () => {};
+    let resolveSecond: (s: Schema) => void = () => {};
+    const first = new Promise<Schema>((r) => (resolveFirst = r));
+    const second = new Promise<Schema>((r) => (resolveSecond = r));
+    const describe = vi
+      .fn()
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(() => second);
+    const h = setup({ describeSchema: describe });
+
+    let runFirst: Promise<void> = Promise.resolve();
+    let runSecond: Promise<void> = Promise.resolve();
+    act(() => {
+      runFirst = h.rendered.result.current.refreshSchema('t1', 's1');
+      runSecond = h.rendered.result.current.refreshSchema('t1', 's1');
+    });
+
+    const secondSchema = { tables: [], procedures: [] } as unknown as Schema;
+    await act(async () => {
+      resolveSecond(secondSchema);
+      await runSecond;
+    });
+    // Newest describe settled — schema stored, loading done.
+    expect(merged(h.patches).schemaLoading).toBe(false);
+
+    const firstSchema = { tables: [], procedures: [] } as unknown as Schema;
+    await act(async () => {
+      resolveFirst(firstSchema);
+      await runFirst;
+    });
+    // The stale settle changed nothing.
+    expect(merged(h.patches).schema).toStrictEqual(secondSchema);
   });
 });
 
