@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { connectionOpeningChain } from '../interceptors/connection-opening.js';
+import { useToastStore } from '../toast/toast-store.js';
 import { profileOntoForm } from './profile-form.js';
 import type { ConnectionForm, Profile, TestConnectionResult } from './types.js';
 import { useHealthProbe } from './use-health-probe.js';
@@ -41,6 +42,46 @@ export interface ConnectionAdapter {
   testConnection: (form: ConnectionForm) => Promise<TestConnectionResult>;
   /** Liveness check. Resolves with the engine version string. */
   pingSession: (sessionId: string) => Promise<string>;
+}
+
+/** The password every fresh Firebird install ships with for SYSDBA. */
+const DEFAULT_SYSDBA_PASSWORD = 'masterkey';
+
+/** Substitutes Firebird's default SYSDBA password when the user left
+ *  the password field empty on a profile-less connect.
+ *
+ *  Why: SYSDBA ships with `masterkey`, and the common first-run
+ *  experience was typing host + database, leaving the password blank
+ *  because "SYSDBA doesn't need one", and failing with a bare auth
+ *  error. Firebird does not accept empty passwords (Security2+ stores
+ *  hashes only), so attempting the empty string can only fail —
+ *  substituting directly costs nothing when it is right and fails
+ *  exactly like the old attempt when it is wrong.
+ *
+ *  Profile connects are excluded on purpose: there an empty field
+ *  means "use the stored credential", and silently overriding that
+ *  would be a different feature with different risks. Returns the
+ *  original object untouched when no probe applies, so callers can
+ *  detect the substitution by reference. */
+export function probeDefaultPassword(
+  form: ConnectionForm,
+  profileId: string | null,
+): ConnectionForm {
+  if (profileId !== null) return form;
+  if (form.password !== '') return form;
+  if (form.user.trim().toUpperCase() !== 'SYSDBA') return form;
+  return { ...form, password: DEFAULT_SYSDBA_PASSWORD };
+}
+
+/** Notices the toast viewport that the default password was used —
+ *  the connect succeeded, but the user should know why, and that the
+ *  server is running a well-known credential. */
+function notifyDefaultPasswordUsed(): void {
+  useToastStore.getState().push({
+    kind: 'notice',
+    tone: 'success',
+    title: 'Connected with the default masterkey password',
+  });
 }
 
 /** The subset of a tab this hook reads. */
@@ -198,8 +239,9 @@ export function useConnectionActions({
       // shows an encryption state that belongs to a database the user may
       // no longer be talking to.
       patch(tab.id, { error: null, busy: true, cryptState: null, ...extra });
+      const attemptForm = probeDefaultPassword(form, profileId);
       try {
-        const response = await a.connect({ form, profileId });
+        const response = await a.connect({ form: attemptForm, profileId });
         patch(tab.id, {
           sessionId: response.sessionId,
           results: null,
@@ -209,6 +251,7 @@ export function useConnectionActions({
         });
         rename(tab.id, title);
         connected(tab.id, response.sessionId);
+        if (attemptForm !== form) notifyDefaultPasswordUsed();
       } catch (err) {
         patch(tab.id, { error: String(err) });
       } finally {
@@ -248,14 +291,20 @@ export function useConnectionActions({
     // into the same tab and leak whichever lost.
     if (tab.health === 'reconnecting') return;
     patch(tab.id, { health: 'reconnecting', error: null });
+    // Same default-password probe as the interactive connect: a tab
+    // first opened with the probe keeps an empty password field, and
+    // without this its auto-reconnect would fail where the original
+    // connect succeeded.
+    const attemptForm = probeDefaultPassword(tab.form, tab.selectedProfileId);
     try {
-      const response = await a.connect({ form: tab.form, profileId: tab.selectedProfileId });
+      const response = await a.connect({ form: attemptForm, profileId: tab.selectedProfileId });
       patch(tab.id, {
         sessionId: response.sessionId,
         health: 'healthy',
         lastPingAt: Date.now(),
         connectedAt: Date.now(),
       });
+      if (attemptForm !== tab.form) notifyDefaultPasswordUsed();
       void a
         .pingSession(response.sessionId)
         .then((version) =>
