@@ -79,12 +79,22 @@ function buildCreateTable(table: TableInfo): string {
     const ident = quoteIdentForExport(c.name);
     const nullable = c.nullable ? '' : ' NOT NULL';
     const def = c.defaultExpr ? ` DEFAULT ${c.defaultExpr}` : '';
-    return `    ${ident} ${c.sqlType}${def}${nullable}`;
+    // Same rule as the DDL tab: a domain-based column re-declares the
+    // domain, not the domain's expansion.
+    const typeIdent = c.domain ? quoteDomainIdent(c.domain) : c.sqlType;
+    return `    ${ident} ${typeIdent}${def}${nullable}`;
   });
   const pk = (table.primaryKey ?? []).map((n) => quoteIdentForExport(n));
   const pkLine = pk.length > 0 ? [`    PRIMARY KEY (${pk.join(', ')})`] : [];
   const inner = [...cols, ...pkLine].join(',\n');
   return `CREATE TABLE ${quoteIdentForExport(table.name)} (\n${inner}\n);`;
+}
+
+/** Quotes a domain identifier for DDL: plain dialect-3 names stay
+ *  bare (`D_UUID`), anything else gets the double-quoted form. */
+function quoteDomainIdent(name: string): string {
+  if (/^[A-Z_][A-Z0-9_]*$/.test(name)) return name;
+  return `"${name.replace(/"/g, '""')}"`;
 }
 
 function buildCsv(parts: TableExportPart[], delimiter: string): string {
