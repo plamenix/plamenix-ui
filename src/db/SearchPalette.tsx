@@ -7,6 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import {
+  FunctionSquare,
   Hash,
   KeyRound,
   Search,
@@ -24,6 +25,7 @@ export type SearchHitKind =
   | 'view'
   | 'column'
   | 'procedure'
+  | 'function'
   | 'trigger'
   | 'generator'
   | 'domain';
@@ -146,7 +148,7 @@ export function SearchPalette({ open, schema = null, onClose, onPick }: SearchPa
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleInputKey}
-            placeholder="Search tables, columns, procedures, triggers, generators, domains…"
+            placeholder="Search tables, columns, procedures, functions, triggers, generators, domains…"
             className="flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-subtle"
           />
           {filtered.length > 0 && (
@@ -241,6 +243,7 @@ const KIND_LABEL: Record<SearchHitKind, string> = {
   view: 'Views',
   column: 'Columns',
   procedure: 'Procedures',
+  function: 'Functions',
   trigger: 'Triggers',
   generator: 'Generators',
   domain: 'Domains',
@@ -251,6 +254,7 @@ const KIND_ICON: Record<SearchHitKind, ComponentType<{ className?: string }>> = 
   view: View,
   column: KeyRound,
   procedure: TerminalSquare,
+  function: FunctionSquare,
   trigger: Zap,
   generator: Hash,
   domain: Shapes,
@@ -289,6 +293,14 @@ function indexSchema(schema: Schema | null): SearchHit[] {
       label: p.name,
       identifier: p.name,
       hint: `IN ${p.inputCount} · OUT ${p.outputCount}`,
+    });
+  }
+  for (const f of schema.functions ?? []) {
+    hits.push({
+      kind: 'function',
+      label: f.name,
+      identifier: f.name,
+      hint: f.udf ? 'UDF' : undefined,
     });
   }
   for (const t of schema.triggers ?? []) {

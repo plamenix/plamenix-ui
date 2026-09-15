@@ -485,6 +485,14 @@ export type Row = {
 	cells: ColumnValue[],
 };
 
+/**  One function - a legacy external (UDF) or a PSQL stored function. */
+export type FunctionInfo = {
+	/**  Function name as Firebird stores it. */
+	name: string,
+	/**  true for a legacy external function (UDF, module-backed), false for a PSQL stored function (Firebird 3+). */
+	udf: boolean,
+};
+
 /**
  *  Catalogue describing the schema visible to a Firebird session.
  * 
@@ -508,6 +516,8 @@ export type Schema = {
 	 *  `RDB$N`-named domains that back regular columns).
 	 */
 	domains?: DomainInfo[],
+	/**  Functions - legacy UDFs and PSQL stored functions - from RDB$FUNCTIONS (system flag = 0). */
+	functions?: FunctionInfo[],
 };
 
 /**

@@ -14,6 +14,7 @@ import {
   Database,
   DatabaseBackup,
   Eye,
+  FunctionSquare,
   Hash,
   List as ListIcon,
   Loader2,
@@ -53,6 +54,7 @@ import { getModKeyLabel, getShiftKeyLabel } from '../platform';
 import { compareExactInt, formatExactInt, parseExactInt } from './exact-int';
 import type {
   DomainInfo,
+  FunctionInfo,
   GeneratorInfo,
   ProcedureInfo,
   Schema,
@@ -137,12 +139,13 @@ export interface SchemaBrowserProps extends SchemaBrowserExtra {
    *  palette (Mod+Shift+F). Renders a small affordance to the right of
    *  the local filter input. Omit to hide. */
   onOpenDeepSearch?: () => void;
-  /** Fired when the user clicks a table, view, procedure, or trigger
-   *  name. The host typically:
+  /** Fired when the user clicks a table, view, procedure, trigger,
+   *  function, generator, or domain name. The host typically:
    *   - **table**     → runs `SELECT * FROM <name>` and renders the result
    *   - **view**      → opens the DDL viewer
    *   - **procedure** → opens the DDL viewer
    *   - **trigger**   → opens the DDL viewer
+   *   - **function**  → copy affordance only (no DDL source for UDFs)
    *
    *  Mirrors DBeaver / DataGrip / TablePlus click semantics. When
    *  omitted, the legacy `onSelect` (paste-into-editor) handler runs
@@ -153,6 +156,7 @@ export interface SchemaBrowserProps extends SchemaBrowserExtra {
       | { kind: 'view'; name: string }
       | { kind: 'procedure'; name: string }
       | { kind: 'trigger'; name: string }
+      | { kind: 'function'; name: string }
       | { kind: 'generator'; name: string }
       | { kind: 'domain'; name: string },
   ) => void;
@@ -298,6 +302,7 @@ export function SchemaBrowser({
   const [openTables, setOpenTables] = useState(true);
   const [openViews, setOpenViews] = useState(true);
   const [openProcs, setOpenProcs] = useState(false);
+  const [openFunctions, setOpenFunctions] = useState(false);
   const [openTriggers, setOpenTriggers] = useState(false);
   const [openGens, setOpenGens] = useState(false);
   const [openDomains, setOpenDomains] = useState(false);
@@ -315,6 +320,7 @@ export function SchemaBrowser({
   const isSearching = lower !== '';
   const allTables = schema?.tables ?? [];
   const allProcs = schema?.procedures ?? [];
+  const allFunctions = schema?.functions ?? [];
   const allTriggers = schema?.triggers ?? [];
   const allGens = schema?.generators ?? [];
   const allDomains = schema?.domains ?? [];
@@ -342,12 +348,14 @@ export function SchemaBrowser({
   const tables = tableMatches.map((m) => m.table);
   const views = viewMatches.map((m) => m.table);
   const procs = allProcs.filter((p) => matchesFilter(p.name));
+  const functions = allFunctions.filter((f) => matchesFilter(f.name));
   const triggers = allTriggers.filter((t) => matchesFilter(t.name) || matchesFilter(t.relation));
   const gens = allGens.filter((g) => matchesFilter(g.name));
   const domains = allDomains.filter((d) => matchesFilter(d.name));
   const showTables = isSearching || openTables;
   const showViews = isSearching || openViews;
   const showProcs = isSearching || openProcs;
+  const showFunctions = isSearching || openFunctions;
   const showTriggers = isSearching || openTriggers;
   const showGens = isSearching || openGens;
   const showDomains = isSearching || openDomains;
@@ -466,6 +474,7 @@ export function SchemaBrowser({
           <p className="px-3 py-2 italic text-fg-subtle">No schema loaded.</p>
         ) : allTables.length === 0 &&
           allProcs.length === 0 &&
+          allFunctions.length === 0 &&
           allTriggers.length === 0 &&
           allGens.length === 0 &&
           allDomains.length === 0 ? (
@@ -476,6 +485,7 @@ export function SchemaBrowser({
         ) : tables.length === 0 &&
           views.length === 0 &&
           procs.length === 0 &&
+          functions.length === 0 &&
           triggers.length === 0 &&
           gens.length === 0 &&
           domains.length === 0 ? (
@@ -570,6 +580,36 @@ export function SchemaBrowser({
                         onAction ? openMenu({ kind: 'procedure', target: p }) : undefined
                       }
                       onShowDdl={onShowDdl ? () => onShowDdl('procedure', p.name) : undefined}
+                    />
+                  ))}
+              </>
+            )}
+
+            {(functions.length > 0 || (!isSearching && allFunctions.length > 0)) && (
+              <>
+                <SectionHeader
+                  label="Functions"
+                  icon={FunctionSquare}
+                  open={showFunctions}
+                  count={functions.length}
+                  locked={isSearching}
+                  onToggle={() => setOpenFunctions((v) => !v)}
+                  onRefresh={onRefresh}
+                  busy={busy}
+                  tone="violet"
+                  onOpenList={onPickObjectList ? () => onPickObjectList('functions') : undefined}
+                />
+                {showFunctions &&
+                  functions.map((f) => (
+                    <FunctionNode
+                      key={f.name}
+                      fn={f}
+                      filter={filter}
+                      onSelect={onSelect}
+                      onCopyIdentifier={onCopyIdentifier}
+                      onOpen={
+                        onOpenObject ? () => onOpenObject({ kind: 'function', name: f.name }) : undefined
+                      }
                     />
                   ))}
               </>
@@ -890,7 +930,7 @@ interface SectionHeaderProps {
   busy?: boolean;
   /** Optional color tone for the section header background — used to
    *  make each schema category visually distinct in the sidebar. */
-  tone?: 'accent' | 'cyan' | 'emerald' | 'amber' | 'purple' | 'pink';
+  tone?: 'accent' | 'cyan' | 'emerald' | 'amber' | 'purple' | 'violet' | 'pink';
 }
 
 function SectionHeader({
@@ -918,6 +958,8 @@ function SectionHeader({
         return 'bg-warning/5 hover:bg-warning/10';
       case 'purple':
         return 'bg-purple-500/5 hover:bg-purple-500/10';
+      case 'violet':
+        return 'bg-violet-500/5 hover:bg-violet-500/10';
       case 'pink':
         return 'bg-pink-500/5 hover:bg-pink-500/10';
       default:
@@ -936,6 +978,8 @@ function SectionHeader({
         return 'text-warning';
       case 'purple':
         return 'text-purple-300';
+      case 'violet':
+        return 'text-violet-300';
       case 'pink':
         return 'text-pink-300';
       default:
@@ -1258,6 +1302,39 @@ function ProcedureNode({
         </button>
       )}
     </div>
+  );
+}
+
+/** One function row: name plus a UDF tag for module-backed externals.
+ *  No DDL affordance — a UDF has no stored source text and PSQL
+ *  function sources are not fetched by any shell yet. */
+function FunctionNode({
+  fn,
+  filter,
+  onSelect,
+  onCopyIdentifier,
+  onOpen,
+}: {
+  fn: FunctionInfo;
+  filter: string;
+  onSelect?: ((identifier: string) => void) | undefined;
+  onCopyIdentifier?: ((identifier: string, label: string) => void) | undefined;
+  onOpen?: (() => void) | undefined;
+}) {
+  const hint = fn.udf ? 'UDF' : undefined;
+  const title = fn.udf
+    ? `${fn.name} — external function (UDF), drag to insert`
+    : `${fn.name} — stored function, drag to insert`;
+  return (
+    <LeafNode
+      name={fn.name}
+      filter={filter}
+      onSelect={onSelect}
+      onCopyIdentifier={onCopyIdentifier}
+      onOpen={onOpen}
+      hint={hint}
+      title={title}
+    />
   );
 }
 

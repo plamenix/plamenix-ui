@@ -18,6 +18,7 @@ export type {
   DatabaseAlias,
   DatabaseStats,
   DomainInfo,
+  FunctionInfo,
   GeneratorInfo,
   HistoryEntry,
   ListAliasesResult,

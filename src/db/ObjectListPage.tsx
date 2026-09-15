@@ -38,6 +38,7 @@ import { quoteIdent } from './schema-actions';
 import { compareExactInt, formatExactInt, parseExactInt } from './exact-int';
 import type {
   DomainInfo,
+  FunctionInfo,
   GeneratorInfo,
   ProcedureInfo,
   Schema,
@@ -50,6 +51,7 @@ export type ObjectListKind =
   | 'tables'
   | 'views'
   | 'procedures'
+  | 'functions'
   | 'triggers'
   | 'generators'
   | 'domains';
@@ -92,6 +94,10 @@ interface KindSpec<T extends { name: string }> {
   title: string;
   singular: string;
   dropKeyword: string;
+  /** Row-aware DROP keyword override. Functions need it: a UDF drops
+   *  with `DROP EXTERNAL FUNCTION`, a PSQL stored function with plain
+   *  `DROP FUNCTION` — one static keyword cannot cover both. */
+  dropKeywordFor?: (item: T) => string;
   pickItems: (schema: Schema) => readonly T[];
   columns: ColumnSpec<T>[];
 }
@@ -216,6 +222,26 @@ const PROCEDURES_SPEC: KindSpec<ProcedureInfo> = {
   ],
 };
 
+const FUNCTIONS_SPEC: KindSpec<FunctionInfo> = {
+  title: 'Functions',
+  singular: 'function',
+  // Fallback only — `dropKeywordFor` picks the UDF vs stored form per
+  // row, since both kinds share this list.
+  dropKeyword: 'FUNCTION',
+  dropKeywordFor: (f) => (f.udf ? 'EXTERNAL FUNCTION' : 'FUNCTION'),
+  pickItems: (s) => s.functions ?? [],
+  columns: [
+    { key: 'name', label: 'Name', width: '60%' },
+    {
+      key: 'kind',
+      label: 'Kind',
+      width: '40%',
+      render: (f) => (f.udf ? 'External (UDF)' : 'Stored'),
+      compare: (a, b) => Number(b.udf) - Number(a.udf),
+    },
+  ],
+};
+
 const TRIGGERS_SPEC: KindSpec<TriggerInfo> = {
   title: 'Triggers',
   singular: 'trigger',
@@ -336,6 +362,8 @@ function pickSpec(kind: ObjectListKind): KindSpec<{ name: string }> {
       return TRIGGERS_SPEC as unknown as KindSpec<{ name: string }>;
     case 'generators':
       return GENERATORS_SPEC as unknown as KindSpec<{ name: string }>;
+    case 'functions':
+      return FUNCTIONS_SPEC as unknown as KindSpec<{ name: string }>;
     case 'domains':
       return DOMAINS_SPEC as unknown as KindSpec<{ name: string }>;
   }
@@ -357,6 +385,10 @@ export function ObjectListPage({
 }: ObjectListPageProps) {
   const spec = pickSpec(kind);
   const items = spec.pickItems(schema);
+  // Selection and the drop actions are name-keyed; the by-name map
+  // recovers the row so specs with a row-aware DROP keyword
+  // (functions: UDF vs stored) can emit the right statement.
+  const itemsByName = new Map(items.map((item) => [item.name, item]));
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortState | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -422,7 +454,14 @@ export function ObjectListPage({
   };
 
   const dropSql = (names: string[]): string =>
-    names.map((n) => `DROP ${spec.dropKeyword} ${quoteIdent(n)};`).join('\n');
+    names
+      .map((n) => {
+        const item = itemsByName.get(n);
+        const keyword =
+          item && spec.dropKeywordFor ? spec.dropKeywordFor(item) : spec.dropKeyword;
+        return `DROP ${keyword} ${quoteIdent(n)};`;
+      })
+      .join('\n');
 
   const [editingGenerator, setEditingGenerator] = useState<{ name: string; draft: string } | null>(
     null,
