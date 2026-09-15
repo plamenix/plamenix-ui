@@ -40,7 +40,13 @@ export function buildCreateTableDdl(table: TableInfo): string {
   const lines = table.columns.map((c) => {
     const nullable = c.nullable ? '' : ' NOT NULL';
     const def = c.defaultExpr ? ` DEFAULT ${c.defaultExpr}` : '';
-    return `    ${quoteIdent(c.name)} ${c.sqlType}${def}${nullable}`;
+    // A domain-based column re-declares the domain — rendering the
+    // expanded base type would detach the column from its domain the
+    // next time this DDL is re-run. `sqlType` remains the resolved
+    // base type for type-aware callers (filters, editors); only the
+    // DDL rendering prefers the domain name.
+    const typeIdent = c.domain ? quoteDomainIdent(c.domain) : c.sqlType;
+    return `    ${quoteIdent(c.name)} ${typeIdent}${def}${nullable}`;
   });
   const pkSegments = table.primaryKey ?? [];
   if (pkSegments.length > 0) {
@@ -48,6 +54,14 @@ export function buildCreateTableDdl(table: TableInfo): string {
     lines.push(`    PRIMARY KEY (${pk})`);
   }
   return `CREATE TABLE ${quoteIdent(table.name)} (\n${lines.join(',\n')}\n);`;
+}
+
+/** Quotes a domain identifier the way `quoteIdent` quotes columns:
+ *  plain dialect-3 names stay bare (`D_UUID`), anything else gets the
+ *  double-quoted form. */
+function quoteDomainIdent(name: string): string {
+  if (/^[A-Z_][A-Z0-9_]*$/.test(name)) return name;
+  return `"${name.replace(/"/g, '""')}"`;
 }
 
 export interface TableObjectViewProps {

@@ -73,6 +73,13 @@ export type ColumnInfo = {
 	 *  `RDB$FIELDS.RDB$DEFAULT_SOURCE` (domain default).
 	 */
 	defaultExpr?: string | null,
+	/**
+	 *  Name of the user-defined domain the column is based on, when one
+	 *  exists (`RDB$RELATION_FIELDS.RDB$FIELD_SOURCE` naming a domain).
+	 *  DDL rendering prefers this over `sqlType`; type-aware behaviour
+	 *  keeps using the resolved `sqlType`.
+	 */
+	domain?: string | null,
 };
 
 /**
