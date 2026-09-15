@@ -23,9 +23,9 @@ import {
   escapeXml,
   quoteCsvField,
   quoteIdentForExport,
-  triggerDownload,
   type XlsxCell,
 } from './cell-format';
+import { EXPORT_MIME, notifyExportSaved, saveExportFile } from './export-sink';
 
 /** A single table's contribution to a database-wide export. */
 export interface TableExportPart {
@@ -173,12 +173,12 @@ function sanitiseSheetName(name: string): string {
     .slice(0, 31);
 }
 
-async function downloadXlsxMultiSheet(parts: TableExportPart[]): Promise<void> {
+async function buildXlsxMultiSheetBytes(parts: TableExportPart[]): Promise<Uint8Array> {
   const mod = (await import('write-excel-file/browser')) as unknown as {
     default: (
       data: XlsxCell[][][],
-      opts: { fileName: string; sheets?: string[] },
-    ) => Promise<unknown>;
+      opts?: { fileName?: string; sheets?: string[] },
+    ) => Promise<{ toBlob: () => Promise<Blob> }>;
   };
   const sheets: XlsxCell[][][] = [];
   const names: string[] = [];
@@ -200,14 +200,17 @@ async function downloadXlsxMultiSheet(parts: TableExportPart[]): Promise<void> {
     seen.add(candidate);
     names.push(candidate);
   }
-  await mod.default(sheets, { fileName: timestampFile('xlsx'), sheets: names });
+  const file = await mod.default(sheets, { sheets: names });
+  const blob = await file.toBlob();
+  return new Uint8Array(await blob.arrayBuffer());
 }
 
 /**
  * Drives the export end-to-end: iterates target tables, calls
- * `fetchTable` per row set, then concatenates and triggers a
- * browser download. Throws if any fetch rejects so the caller can
- * surface the failing table to the user.
+ * `fetchTable` per row set, then concatenates and hands the document
+ * to the save sink (native save dialog on hosts that register one,
+ * browser download otherwise). Throws if any fetch rejects so the
+ * caller can surface the failing table to the user.
  */
 export async function runDatabaseExport({
   schema,
@@ -225,21 +228,31 @@ export async function runDatabaseExport({
     parts.push(await fetchTable(t));
   }
   onProgress?.({ step: tables.length, total: tables.length, table: '' });
+  const rows = parts.reduce((sum, p) => sum + p.rows.length, 0);
+  const write = async (
+    contents: string | Uint8Array,
+    ext: string,
+    mime: string,
+  ): Promise<void> => {
+    const filename = timestampFile(ext);
+    const result = await saveExportFile({ filename, mime, contents });
+    notifyExportSaved(rows > 0 ? rows : null, result, filename);
+  };
   if (format === 'csv') {
-    triggerDownload(buildCsv(parts, csvDelimiter), timestampFile('csv'), 'text/csv');
+    await write(buildCsv(parts, csvDelimiter), 'csv', 'text/csv');
     return;
   }
   if (format === 'json') {
-    triggerDownload(buildJson(parts), timestampFile('json'), 'application/json');
+    await write(buildJson(parts), 'json', 'application/json');
     return;
   }
   if (format === 'sql') {
-    triggerDownload(buildSql(parts, includeDdl), timestampFile('sql'), 'application/sql');
+    await write(buildSql(parts, includeDdl), 'sql', 'application/sql');
     return;
   }
   if (format === 'xml') {
-    triggerDownload(buildXml(parts), timestampFile('xml'), 'application/xml');
+    await write(buildXml(parts), 'xml', 'application/xml');
     return;
   }
-  await downloadXlsxMultiSheet(parts);
+  await write(await buildXlsxMultiSheetBytes(parts), 'xlsx', EXPORT_MIME.xlsx);
 }

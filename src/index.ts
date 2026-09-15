@@ -619,6 +619,15 @@ export {
   type TableExportPart,
 } from './db/database-export';
 export {
+  EXPORT_MIME,
+  notifyExportSaved,
+  saveExportFile,
+  setExportFileSink,
+  type ExportFileRequest,
+  type ExportFileResult,
+  type ExportFileSink,
+} from './db/export-sink';
+export {
   defaultExportFilename,
   exportStamp,
   mimeFor,

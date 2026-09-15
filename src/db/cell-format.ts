@@ -172,8 +172,13 @@ export function timestampFilename(ext: string): string {
   return `plamenix-result-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.${ext}`;
 }
 
-export function triggerDownload(content: string, filename: string, mime: string): void {
-  const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+export function triggerDownload(
+  content: string | Uint8Array,
+  filename: string,
+  mime: string,
+): void {
+  const mimeHeader = content instanceof Uint8Array ? mime : `${mime};charset=utf-8`;
+  const blob = new Blob([content as BlobPart], { type: mimeHeader });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
