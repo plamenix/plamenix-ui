@@ -13,6 +13,7 @@ import {
   highlightActiveLine,
   keymap,
   lineNumbers,
+  tooltips,
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { sql } from '@codemirror/lang-sql';
@@ -372,6 +373,15 @@ export function SqlEditor({
             },
           ],
         }),
+        // The autocomplete popup (and lint hover tooltips) mount as a
+        // child of the editor DOM by default, so the host div's
+        // `overflow-hidden` clipped the popup at the editor's bottom
+        // edge — on short editors half the suggestion list was simply
+        // unreachable. Parenting tooltips to `document.body` takes
+        // them out of every clipping ancestor; CodeMirror keeps them
+        // anchored to the caret and still flips them above the cursor
+        // when space runs out.
+        tooltips({ parent: document.body }),
         // I5.13 — `@codemirror/lint` linter calls back per buffer
         // change with the current document text. The callback walks
         // the registered diagnostic providers via the ref, flattens
