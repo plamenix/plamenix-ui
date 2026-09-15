@@ -51,9 +51,9 @@ import {
   quoteCsvField,
   quoteIdentForExport,
   timestampFilename,
-  triggerDownload,
   type XlsxCell,
 } from './cell-format';
+import { EXPORT_MIME, notifyExportSaved, saveExportFile } from './export-sink';
 import type { BlobRef } from './types';
 import { usePluginContributions } from '../plugin-react/usePluginContributions';
 import {
@@ -807,14 +807,6 @@ function toJson(columns: RowsArg, rows: RowArg): string {
   );
 }
 
-function downloadCsv(columns: RowsArg, rows: RowArg, delimiter: string): void {
-  triggerDownload(toCsv(columns, rows, delimiter), timestampFilename('csv'), 'text/csv');
-}
-
-function downloadJson(columns: RowsArg, rows: RowArg): void {
-  triggerDownload(toJson(columns, rows), timestampFilename('json'), 'application/json');
-}
-
 /** Builds the SQL export body: optionally CREATE TABLE DDL, then one
  *  INSERT per row. When `editable` is null the source table is
  *  unknown, so DDL is skipped and the INSERT uses a `<TABLE>`
@@ -854,19 +846,6 @@ function toSql(
   return out.join('\n') + '\n';
 }
 
-function downloadSql(
-  columns: RowsArg,
-  rows: RowArg,
-  editable: EditableContext | null,
-  includeDdl: boolean,
-): void {
-  triggerDownload(
-    toSql(columns, rows, editable, includeDdl),
-    timestampFilename('sql'),
-    'application/sql',
-  );
-}
-
 function toXml(columns: RowsArg, rows: RowArg): string {
   const lines: string[] = [];
   lines.push('<?xml version="1.0" encoding="UTF-8"?>');
@@ -885,22 +864,25 @@ function toXml(columns: RowsArg, rows: RowArg): string {
   return lines.join('\n') + '\n';
 }
 
-function downloadXml(columns: RowsArg, rows: RowArg): void {
-  triggerDownload(toXml(columns, rows), timestampFilename('xml'), 'application/xml');
-}
-
-/** Builds and downloads a single-sheet XLSX of the current result.
- *  Loads `write-excel-file` via dynamic import so the lib is only in
- *  the bundle when the user actually clicks the button. */
-async function downloadXlsx(columns: RowsArg, rows: RowArg): Promise<void> {
+/** Builds a single-sheet XLSX as raw bytes so the save sink — dialog
+ *  or default download — decides where it lands. Loads
+ *  `write-excel-file` via dynamic import so the lib is only in the
+ *  bundle when the user actually clicks the button. The library's
+ *  browser build returns a `{ toBlob }` handle when called without a
+ *  `fileName`; asking for the blob keeps the bytes out of its own
+ *  hidden-download path. */
+async function buildXlsxBytes(columns: RowsArg, rows: RowArg): Promise<Uint8Array> {
   const mod = (await import('write-excel-file/browser')) as unknown as {
-    default: (data: XlsxCell[][], opts: { fileName: string }) => Promise<unknown>;
+    default: (
+      data: XlsxCell[][],
+      opts?: { fileName?: string },
+    ) => Promise<{ toBlob: () => Promise<Blob> }>;
   };
   const header: XlsxCell[] = columns.map((c) => ({ value: c.name }));
   const body: XlsxCell[][] = rows.map((r) => columns.map((_, i) => cellToXlsx(r.cells[i])));
-  await mod.default([header, ...body], {
-    fileName: timestampFilename('xlsx'),
-  });
+  const file = await mod.default([header, ...body], {});
+  const blob = await file.toBlob();
+  return new Uint8Array(await blob.arrayBuffer());
 }
 
 interface CellState {
@@ -1959,23 +1941,31 @@ function VirtualRows({
                     editable,
                     predicate: activeFilterPredicate(),
                   });
+                  let contents: string | Uint8Array;
                   switch (kind) {
                     case 'csv':
-                      downloadCsv(columns, exportRows, csvDelimiter);
+                      contents = toCsv(columns, exportRows, csvDelimiter);
                       break;
                     case 'json':
-                      downloadJson(columns, exportRows);
+                      contents = toJson(columns, exportRows);
                       break;
                     case 'xlsx':
-                      await downloadXlsx(columns, exportRows);
+                      contents = await buildXlsxBytes(columns, exportRows);
                       break;
                     case 'sql':
-                      downloadSql(columns, exportRows, editable, exportIncludeDdl);
+                      contents = toSql(columns, exportRows, editable, exportIncludeDdl);
                       break;
                     case 'xml':
-                      downloadXml(columns, exportRows);
+                      contents = toXml(columns, exportRows);
                       break;
                   }
+                  const filename = timestampFilename(kind);
+                  const result = await saveExportFile({
+                    filename,
+                    mime: EXPORT_MIME[kind],
+                    contents,
+                  });
+                  notifyExportSaved(exportRows.length, result, filename);
                 } catch (err) {
                   setExportError(err instanceof Error ? err.message : String(err));
                 } finally {
@@ -2083,20 +2073,20 @@ function VirtualRows({
                   };
                   if (editable) formatArgs.tableInfo = editable.table;
                   const result: ExportFormatResult = await button.onSelect(formatArgs);
-                  const blob =
+                  // Plugin bodies may be strings or ready-made blobs —
+                  // normalise to what the save sink takes. The sink
+                  // (dialog or browser download) owns where the file
+                  // lands, exactly as for the built-in formats.
+                  const contents =
                     result.body instanceof Blob
-                      ? result.body
-                      : new Blob([result.body], {
-                          type: `${result.mimeType};charset=utf-8`,
-                        });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = result.filename;
-                  document.body.appendChild(a);
-                  a.click();
-                  a.remove();
-                  URL.revokeObjectURL(url);
+                      ? new Uint8Array(await result.body.arrayBuffer())
+                      : result.body;
+                  const saveResult = await saveExportFile({
+                    filename: result.filename,
+                    mime: result.mimeType,
+                    contents,
+                  });
+                  notifyExportSaved(exportRows.length, saveResult, result.filename);
                 } catch (err) {
                   setExportError(err instanceof Error ? err.message : String(err));
                 } finally {
