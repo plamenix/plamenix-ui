@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectionOpeningChain } from '../interceptors/connection-opening.js';
 import type { InterceptorRegistration } from '../interceptors/chain.js';
 import {
+  probeDefaultPassword,
   useConnectionActions,
   type ConnectionAdapter,
   type ConnectionPatch,
@@ -27,6 +28,7 @@ import {
   type UseConnectionActionsOptions,
 } from './use-connection-actions.js';
 import type { ConnectionForm } from './types.js';
+import { useToastStore } from '../toast/toast-store.js';
 
 /** The chain is a module singleton, so a handler left registered would
  *  leak into every later test in this file. */
@@ -116,6 +118,107 @@ function setup(
 function merged(patches: [string, ConnectionPatch][], tabId = 't1'): ConnectionPatch {
   return patches.filter(([id]) => id === tabId).reduce((acc, [, p]) => ({ ...acc, ...p }), {});
 }
+
+describe('the default SYSDBA password probe', () => {
+  // A fresh Firebird install ships SYSDBA as `masterkey`, and Firebird
+  // accepts no empty password at all — so an empty field on a quick
+  // connect is a failed connect waiting to happen. The hook substitutes
+  // the default for that one attempt; these pin where it applies and,
+  // just as importantly, where it must not.
+  const EMPTY_SYSDBA: ConnectionForm = { ...FORM, password: '' };
+
+  async function connectWith(form: ConnectionForm, profileId: string | null = null) {
+    const h = setup({ activeTab: tab({ form, selectedProfileId: profileId }) });
+    await act(async () => {
+      await h.rendered.result.current.handleConnect();
+    });
+    return h;
+  }
+
+  it('substitutes masterkey on a profile-less connect with an empty password', async () => {
+    const h = await connectWith(EMPTY_SYSDBA);
+
+    const call = vi.mocked(h.adapter.connect).mock.calls[0]?.[0];
+    expect(call?.form.password).toBe('masterkey');
+    expect(call?.profileId).toBeNull();
+    // The connect succeeded: the tab reports healthy, not an error.
+    expect(merged(h.patches).health).toBe('healthy');
+  });
+
+  it('leaves the form itself untouched — the field stays empty', async () => {
+    // Substituting into the stored form would put `masterkey` on disk
+    // via tab persistence and into every later reconnect. Only the
+    // attempt sees it.
+    const h = await connectWith(EMPTY_SYSDBA);
+
+    const call = vi.mocked(h.adapter.connect).mock.calls[0]?.[0];
+    expect(call?.form).not.toBe(EMPTY_SYSDBA);
+    expect(EMPTY_SYSDBA.password).toBe('');
+    const wroteForm = h.patches.some(([, p]) => p.form !== undefined);
+    expect(wroteForm).toBe(false);
+  });
+
+  it('treats the username case-insensitively and trims it', async () => {
+    const h = await connectWith({ ...EMPTY_SYSDBA, user: '  sysdba ' });
+    expect(vi.mocked(h.adapter.connect).mock.calls[0]?.[0]?.form.password).toBe('masterkey');
+  });
+
+  it('leaves non-SYSDBA users alone', async () => {
+    const h = await connectWith({ ...EMPTY_SYSDBA, user: 'ADMIN' });
+    expect(vi.mocked(h.adapter.connect).mock.calls[0]?.[0]?.form.password).toBe('');
+  });
+
+  it('leaves a non-empty password alone', async () => {
+    const h = await connectWith({ ...FORM, password: 'real-secret' });
+    expect(vi.mocked(h.adapter.connect).mock.calls[0]?.[0]?.form.password).toBe('real-secret');
+  });
+
+  it('does not probe profile connects — empty means use the stored credential', async () => {
+    // `profile_connect` treats an absent password as "read the keyring
+    // entry". Silently overriding that with the install default would
+    // bypass the stored credential the user chose.
+    const h = await connectWith(EMPTY_SYSDBA, 'profile-1');
+
+    expect(vi.mocked(h.adapter.connect).mock.calls[0]?.[0]?.form.password).toBe('');
+    expect(vi.mocked(h.adapter.connect).mock.calls[0]?.[0]?.profileId).toBe('profile-1');
+  });
+
+  it('tells the user the default password was used', async () => {
+    // Silent substitution would be indistinguishable from magic; the
+    // notice also flags that the server still runs a well-known
+    // credential.
+    useToastStore.getState().clear();
+    await connectWith(EMPTY_SYSDBA);
+
+    const notices = useToastStore
+      .getState()
+      .toasts.filter((t) => t.kind === 'notice' && t.title.includes('default masterkey'));
+    expect(notices.length).toBe(1);
+  });
+
+  it('no notice when the password was typed or the probe did not apply', async () => {
+    useToastStore.getState().clear();
+    await connectWith(FORM);
+    await connectWith({ ...EMPTY_SYSDBA, user: 'ADMIN' });
+
+    expect(useToastStore.getState().toasts.length).toBe(0);
+  });
+
+  it('reconnect probes too, so auto-reconnect survives an empty field', async () => {
+    // The tab was first opened via the probe — its stored form still
+    // holds an empty password. Without the probe here, every health
+    // recovery would fail where the original connect succeeded.
+    const h = setup({
+      activeTab: tab({ form: EMPTY_SYSDBA, health: 'dead' }),
+    });
+    await act(async () => {
+      await h.rendered.result.current.handleReconnect();
+    });
+
+    expect(vi.mocked(h.adapter.connect).mock.calls[0]?.[0]?.form.password).toBe('masterkey');
+    expect(merged(h.patches).health).toBe('healthy');
+  });
+});
 
 describe('handleConnect', () => {
   it('opens a session and reports it healthy', async () => {
